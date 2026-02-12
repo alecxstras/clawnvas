@@ -54,20 +54,6 @@ export class BrowserNodeUtil extends ShapeUtil<BrowserNodeShape> {
     };
   }
 
-  getGeometry(shape: BrowserNodeShape) {
-    // Return polygon geometry with vertices for tldraw
-    const { w, h } = shape.props;
-    return {
-      type: 'polygon' as const,
-      points: [
-        { x: 0, y: 0 },
-        { x: w, y: 0 },
-        { x: w, y: h },
-        { x: 0, y: h },
-      ],
-    };
-  }
-
   canResize = () => true;
   canBind = () => false;
   canEdit = () => false;
