@@ -96,7 +96,7 @@ export class BrowserNodeUtil extends ShapeUtil<BrowserNodeShape> {
 
 // Component implementation
 function BrowserNodeComponent({ shape }: { shape: BrowserNodeShape }) {
-  const { nodeId, title, status, viewerCount, w, h } = shape.props;
+  const { nodeId, title, status, viewerCount, w, h, ownerToken } = shape.props;
   const videoRef = useRef<HTMLVideoElement>(null);
   const [localStatus, setLocalStatus] = useState<NodeStatus>(status);
   const [localViewerCount, setLocalViewerCount] = useState(viewerCount);
@@ -201,7 +201,7 @@ function BrowserNodeComponent({ shape }: { shape: BrowserNodeShape }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           nodeId,
-          ownerToken: shape.props.ownerToken,
+          ownerToken,
           title: `Browser Session - ${nodeId.slice(0, 8)}`,
         }),
       });
@@ -225,7 +225,7 @@ function BrowserNodeComponent({ shape }: { shape: BrowserNodeShape }) {
     } finally {
       setIsLoading(false);
     }
-  }, [nodeId, shape.props.ownerToken, connect]);
+  }, [nodeId, ownerToken, connect]);
 
   const handleStop = useCallback(async () => {
     if (!nodeId) return;
