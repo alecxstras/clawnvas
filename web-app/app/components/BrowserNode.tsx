@@ -15,6 +15,9 @@ import { useSignaling } from '@/hooks/useSignaling';
 import { useWebRTC } from '@/hooks/useWebRTC';
 import { getViewerToken, revokeNode } from '@/lib/canvas';
 
+// Desktop Helper URL
+const DESKTOP_HELPER_URL = 'http://localhost:3002';
+
 // Shape type definition
 type BrowserNodeShape = TLBaseShape<
   'browser-node',
@@ -22,6 +25,7 @@ type BrowserNodeShape = TLBaseShape<
     w: number;
     h: number;
     nodeId: string;
+    ownerToken: string;
     ownerId: string;
     title: string;
     status: NodeStatus;
@@ -39,6 +43,7 @@ export class BrowserNodeUtil extends ShapeUtil<BrowserNodeShape> {
       w: 400,
       h: 300,
       nodeId: '',
+      ownerToken: '',
       ownerId: '',
       title: 'Browser Session',
       status: 'idle',
@@ -189,17 +194,38 @@ function BrowserNodeComponent({ shape }: { shape: BrowserNodeShape }) {
     if (!nodeId) return;
     setIsLoading(true);
     try {
+      // 1. Tell Desktop Helper to open browser window
+      console.log('[Connect] Opening browser window...');
+      const response = await fetch(`${DESKTOP_HELPER_URL}/create-session`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          nodeId,
+          ownerToken: shape.props.ownerToken,
+          title: `Browser Session - ${nodeId.slice(0, 8)}`,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Desktop helper error: ${response.status}`);
+      }
+
+      const result = await response.json();
+      console.log('[Connect] Browser window opened:', result);
+
+      // 2. Get viewer token and connect
       const { viewerToken } = await getViewerToken(nodeId);
       setToken(viewerToken);
       setLocalStatus('connecting');
       connect();
     } catch (err) {
       console.error('Failed to connect:', err);
+      alert('Failed to open browser. Is Desktop Helper running?');
       setLocalStatus('idle');
     } finally {
       setIsLoading(false);
     }
-  }, [nodeId, connect]);
+  }, [nodeId, shape.props.ownerToken, connect]);
 
   const handleStop = useCallback(async () => {
     if (!nodeId) return;

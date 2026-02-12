@@ -87,31 +87,7 @@ export default function Canvas() {
       const { nodeId, ownerToken } = await createNode('default-project');
       console.log('Created node on server:', nodeId);
 
-      // 2. Tell Desktop Helper to open a window
-      try {
-        const response = await fetch(`${DESKTOP_HELPER_URL}/create-session`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            nodeId,
-            ownerToken,
-            title: `Browser Session - ${nodeId.slice(0, 8)}`,
-          }),
-        });
-
-        if (!response.ok) {
-          throw new Error(`Desktop helper error: ${response.status}`);
-        }
-
-        const result = await response.json();
-        console.log('Desktop window created:', result);
-      } catch (err) {
-        console.error('Failed to reach desktop helper:', err);
-        alert('Desktop helper not running. Please start it first.');
-        return;
-      }
-
-      // 3. Get pointer position and create the shape
+      // 2. Get pointer position and create the shape (no browser window yet)
       const { x, y } = editor.inputs.currentPagePoint;
 
       editor.createShape({
@@ -122,6 +98,7 @@ export default function Canvas() {
           w: 400,
           h: 300,
           nodeId,
+          ownerToken, // Store token for Connect button
           ownerId: 'current-user',
           title: 'Browser Session',
           status: 'idle',
@@ -130,7 +107,7 @@ export default function Canvas() {
         },
       });
 
-      console.log('Browser node created successfully');
+      console.log('Browser node created successfully - click Connect to open browser');
       
     } catch (err) {
       console.error('Failed to create browser node:', err);
