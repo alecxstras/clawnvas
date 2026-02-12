@@ -1,0 +1,17 @@
+{
+  "name": "tldraw-browser-canvas",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev:server": "cd signaling-server && npm run dev",
+    "dev:web": "cd web-app && npm run dev",
+    "dev:desktop": "cd desktop-helper && npm run dev",
+    "install:all": "npm install && cd signaling-server && npm install && cd ../web-app && npm install && cd ../desktop-helper && npm install",
+    "build": "cd signaling-server && npm run build && cd ../web-app && npm run build && cd ../desktop-helper && npm run build"
+  },
+  "workspaces": [
+    "signaling-server",
+    "web-app",
+    "desktop-helper"
+  ]
+}
