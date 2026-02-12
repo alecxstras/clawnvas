@@ -193,9 +193,9 @@ function BrowserNodeComponent({ shape }: { shape: BrowserNodeShape }) {
   const handleConnect = useCallback(async () => {
     if (!nodeId) return;
     setIsLoading(true);
+    
     try {
       // 1. Tell Desktop Helper to open browser window
-      console.log('[Connect] Opening browser window...');
       const response = await fetch(`${DESKTOP_HELPER_URL}/create-session`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -207,11 +207,11 @@ function BrowserNodeComponent({ shape }: { shape: BrowserNodeShape }) {
       });
 
       if (!response.ok) {
-        throw new Error(`Desktop helper error: ${response.status}`);
+        const errorText = await response.text();
+        throw new Error(`Desktop helper error ${response.status}: ${errorText}`);
       }
 
       const result = await response.json();
-      console.log('[Connect] Browser window opened:', result);
 
       // 2. Get viewer token and connect
       const { viewerToken } = await getViewerToken(nodeId);
@@ -219,8 +219,8 @@ function BrowserNodeComponent({ shape }: { shape: BrowserNodeShape }) {
       setLocalStatus('connecting');
       connect();
     } catch (err) {
-      console.error('Failed to connect:', err);
-      alert('Failed to open browser. Is Desktop Helper running?');
+      console.error('[Connect] Failed:', err);
+      alert(`Failed: ${(err as Error).message}`);
       setLocalStatus('idle');
     } finally {
       setIsLoading(false);
