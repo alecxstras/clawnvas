@@ -54,6 +54,16 @@ export class BrowserNodeUtil extends ShapeUtil<BrowserNodeShape> {
     };
   }
 
+  getGeometry(shape: BrowserNodeShape) {
+    return {
+      type: 'rectangle' as const,
+      x: shape.x,
+      y: shape.y,
+      w: shape.props.w,
+      h: shape.props.h,
+    };
+  }
+
   canResize = () => true;
   canBind = () => false;
   canEdit = () => false;
