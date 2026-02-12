@@ -77,6 +77,15 @@ export class BrowserNodeUtil extends ShapeUtil<BrowserNodeShape> {
     return resizeBox(shape, info);
   };
 
+  override onClick(shape: BrowserNodeShape) {
+    // Dispatch custom event that the component can listen for
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('browser-node-click', { 
+        detail: { nodeId: shape.props.nodeId, ownerToken: shape.props.ownerToken }
+      }));
+    }
+  }
+
   component(shape: BrowserNodeShape) {
     return <BrowserNodeComponent shape={shape} />;
   }
@@ -139,6 +148,44 @@ function BrowserNodeComponent({ shape }: { shape: BrowserNodeShape }) {
       setLocalStatus('offline');
     }
   }, [connectionState]);
+
+  // Listen for shape click events
+  useEffect(() => {
+    const handleClick = (e: CustomEvent) => {
+      if (e.detail.nodeId === nodeId && localStatus === 'idle') {
+        console.log('[BrowserNode] Shape clicked, auto-connecting...');
+        // Auto-trigger connect
+        setIsLoading(true);
+        fetch(`${DESKTOP_HELPER_URL}/create-session`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            nodeId,
+            ownerToken,
+            title: `Browser Session - ${nodeId.slice(0, 8)}`,
+          }),
+        })
+          .then(res => {
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            return res.json();
+          })
+          .then(() => getViewerToken(nodeId))
+          .then(({ viewerToken }) => {
+            setToken(viewerToken);
+            setLocalStatus('connecting');
+            connect();
+          })
+          .catch(err => {
+            console.error('Connect failed:', err);
+            alert('Failed to connect: ' + err.message);
+            setIsLoading(false);
+          });
+      }
+    };
+    
+    window.addEventListener('browser-node-click', handleClick as EventListener);
+    return () => window.removeEventListener('browser-node-click', handleClick as EventListener);
+  }, [nodeId, ownerToken, localStatus, connect]);
 
   const handleSignalMessage = useCallback(async (msg: SignalMessage) => {
     if (msg.nodeId !== nodeId) return;
