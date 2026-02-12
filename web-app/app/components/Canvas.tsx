@@ -68,10 +68,42 @@ export default function Canvas() {
       return null;
     });
 
-    // Listen for right-click to add custom menu
-    editor.on('event', (event: any) => {
-      if (event?.name === 'pointer_down' && event.info?.button === 2) {
-        // Right-click - will show context menu
+    // Listen for double-click on browser nodes to connect
+    editor.on('double_click', (event: any) => {
+      const { shape } = event;
+      if (shape?.type === 'browser-node' && shape?.props?.status === 'idle') {
+        console.log('[Canvas] Double-clicked browser node:', shape.props.nodeId);
+        
+        // Open browser window via desktop helper
+        fetch(`${DESKTOP_HELPER_URL}/create-session`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            nodeId: shape.props.nodeId,
+            ownerToken: shape.props.ownerToken,
+            title: `Browser Session - ${shape.props.nodeId.slice(0, 8)}`,
+          }),
+        })
+          .then(res => {
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            return res.json();
+          })
+          .then(() => {
+            console.log('[Canvas] Browser window opened');
+            // Update shape status
+            editor.updateShape({
+              id: shape.id,
+              type: 'browser-node',
+              props: {
+                ...shape.props,
+                status: 'connecting',
+              },
+            });
+          })
+          .catch(err => {
+            console.error('[Canvas] Failed to open browser:', err);
+            alert('Failed to open browser. Is Desktop Helper running?');
+          });
       }
     });
   }, []);
