@@ -15,7 +15,7 @@ import {
   DefaultContextMenuContent,
 } from '@tldraw/tldraw';
 import '@tldraw/tldraw/tldraw.css';
-import { BrowserNodeUtil } from './components/BrowserNode';
+import { BrowserNodeUtil } from './BrowserNode';
 import { createNode } from '@/lib/canvas';
 
 // Extend tldraw with our custom shape
