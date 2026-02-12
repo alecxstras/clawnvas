@@ -31,11 +31,20 @@ export class SessionManager {
     const windowId = window.id;
     console.log(`[Session] Created window ${windowId} for node ${nodeId}`);
 
-    // Load about:blank initially (user can navigate)
-    await window.loadURL('about:blank');
+    // Load a simple browser interface with address bar
+    await window.loadURL('data:text/html,<!DOCTYPE html><html><head><style>body{margin:0;font-family:system-ui}#bar{display:flex;padding:8px;background:#f0f0f0;border-bottom:1px solid #ccc}#url{flex:1;padding:6px;border:1px solid #ccc;border-radius:4px}#go{padding:6px 16px;margin-left:8px;background:#0066cc;color:white;border:none;border-radius:4px;cursor:pointer}#go:hover{background:#0052a3}iframe{width:100%;height:calc(100vh - 50px);border:none}</style></head><body><div id="bar"><input type="text" id="url" placeholder="Enter URL..." value="https://www.google.com"><button id="go">Go</button></div><iframe id="frame"></iframe><script>const url=document.getElementById("url");const go=document.getElementById("go");const frame=document.getElementById("frame");function nav(){let u=url.value;if(!u.match(/^https?:\/\//))u="https://"+u;frame.src=u;}go.onclick=nav;url.onkeypress=(e)=>{if(e.key==="Enter")nav();};frame.onload=()=>{try{url.value=frame.contentWindow.location.href}catch(e){}};</script></body></html>');
+
+    // Ensure window is visible and focused
+    window.show();
+    window.focus();
+
+    // Wait a moment for the window to fully render before capture
+    await new Promise(resolve => setTimeout(resolve, 500));
+
+    console.log(`[Session] Window ${windowId} loaded and ready`);
 
     // Show dev tools for debugging (remove in production)
-    window.webContents.openDevTools();
+    // window.webContents.openDevTools();
 
     // Connect to signaling server using native WebSocket
     const socket = io(SIGNALING_URL, {
@@ -177,36 +186,42 @@ export class SessionManager {
 
       // Get all window sources
       const sources = await desktopCapturer.getSources({
-        types: ['window'],
-        thumbnailSize: { width: 0, height: 0 }, // No thumbnails needed
+        types: ['window', 'screen'],
+        thumbnailSize: { width: 0, height: 0 },
       });
 
       // Debug: log all available sources
-      console.log('[Capture] Available sources:');
+      console.log(`[Capture] Found ${sources.length} sources:`);
       sources.forEach((s) => {
-        console.log(`  - ${s.name} (ID: ${s.id})`);
+        console.log(`  - "${s.name}" (ID: ${s.id})`);
       });
 
       // Match by nodeId in window title or by window ID
       const nodeIdShort = session.nodeId.slice(0, 8);
       const source = sources.find((s) => {
         const matchesNodeId = s.name.includes(nodeIdShort);
+        const matchesTitle = s.name.includes('Browser Session');
         const matchesWindowId = s.id.includes(session.windowId.toString());
-        return matchesNodeId || matchesWindowId;
+        return matchesNodeId || matchesTitle || matchesWindowId;
       });
 
       if (!source) {
-        console.warn('[Capture] Window not found, falling back to webcam');
-        // Fallback to webcam for testing
-        return navigator.mediaDevices.getUserMedia({
-          video: true,
-          audio: false,
-        });
+        console.error('[Capture] Window not found in sources!');
+        console.error(`[Capture] Looking for: "${session.nodeId}" or window ID ${session.windowId}`);
+        
+        // On macOS, screen recording permission might be denied
+        if (process.platform === 'darwin') {
+          console.error('[Capture] macOS: Ensure Screen Recording permission is granted to this app');
+          console.error('[Capture] System Preferences → Security & Privacy → Screen Recording');
+        }
+        
+        throw new Error('Window not found - check screen recording permissions');
       }
 
-      console.log(`[Capture] Found source: ${source.name}`);
+      console.log(`[Capture] Found source: ${source.name} (${source.id})`);
 
       // Get user media with desktop source
+      console.log('[Capture] Starting getUserMedia with desktop source...');
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: false,
         video: {
@@ -223,19 +238,22 @@ export class SessionManager {
         },
       } as any);
 
-      console.log('[Capture] Desktop capture started');
+      console.log('[Capture] Desktop capture started successfully');
+      console.log(`[Capture] Stream has ${stream.getVideoTracks().length} video track(s)`);
+      
       return stream;
 
     } catch (err) {
-      console.error('[Capture] Failed:', err);
+      const errorMsg = (err as Error).message;
+      console.error('[Capture] Failed:', errorMsg);
       
       // Send error to web app
       session.socket.emit('capture-error', {
         nodeId: session.nodeId,
-        error: (err as Error).message,
+        error: errorMsg,
       });
 
-      // Fallback to webcam
+      // Fallback to webcam with warning
       console.log('[Capture] Falling back to webcam');
       return navigator.mediaDevices.getUserMedia({
         video: true,

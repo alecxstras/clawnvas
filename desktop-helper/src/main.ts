@@ -4,6 +4,10 @@ import express from 'express';
 import cors from 'cors';
 import { SessionManager } from './sessions/SessionManager';
 
+// macOS Screen Capture permissions (must be before app.ready)
+app.commandLine.appendSwitch('enable-features', 'ScreenCaptureKit');
+app.commandLine.appendSwitch('enable-usermedia-screen-capturing');
+
 // Keep reference to session manager
 let sessionManager: SessionManager;
 
