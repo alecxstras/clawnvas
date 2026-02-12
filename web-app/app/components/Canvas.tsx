@@ -18,6 +18,9 @@ import '@tldraw/tldraw/tldraw.css';
 import { BrowserNodeUtil } from './BrowserNode';
 import { createNode } from '@/lib/canvas';
 
+// Desktop Helper HTTP endpoint
+const DESKTOP_HELPER_URL = 'http://localhost:3002';
+
 // Extend tldraw with our custom shape
 const shapeUtils = [BrowserNodeUtil];
 
@@ -80,13 +83,37 @@ export default function Canvas() {
       const editor = (window as any).__tldraw_editor;
       if (!editor) return;
 
-      // Create node on backend
+      // 1. Create node on signaling server
       const { nodeId, ownerToken } = await createNode('default-project');
+      console.log('Created node on server:', nodeId);
 
-      // Get pointer position or center of screen
+      // 2. Tell Desktop Helper to open a window
+      try {
+        const response = await fetch(`${DESKTOP_HELPER_URL}/create-session`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            nodeId,
+            ownerToken,
+            title: `Browser Session - ${nodeId.slice(0, 8)}`,
+          }),
+        });
+
+        if (!response.ok) {
+          throw new Error(`Desktop helper error: ${response.status}`);
+        }
+
+        const result = await response.json();
+        console.log('Desktop window created:', result);
+      } catch (err) {
+        console.error('Failed to reach desktop helper:', err);
+        alert('Desktop helper not running. Please start it first.');
+        return;
+      }
+
+      // 3. Get pointer position and create the shape
       const { x, y } = editor.inputs.currentPagePoint;
 
-      // Create the shape
       editor.createShape({
         type: 'browser-node',
         x: x - 200,
@@ -103,12 +130,11 @@ export default function Canvas() {
         },
       });
 
-      // Trigger desktop helper to open browser
-      // This would be done via a local protocol handler or websocket
-      console.log('Created node:', nodeId, 'with token:', ownerToken);
+      console.log('Browser node created successfully');
       
     } catch (err) {
       console.error('Failed to create browser node:', err);
+      alert('Failed to create browser session');
     } finally {
       setIsCreating(false);
     }
