@@ -1,16 +1,3 @@
-import { createTLStore, defaultShapeUtils, TLStore } from '@tldraw/tldraw';
-import { BrowserNodeUtil } from './components/BrowserNode';
-
-// Create store with custom shape
-export function createCanvasStore(): TLStore {
-  return createTLStore({
-    shapeUtils: [
-      ...defaultShapeUtils,
-      BrowserNodeUtil,
-    ],
-  });
-}
-
 // API client
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
