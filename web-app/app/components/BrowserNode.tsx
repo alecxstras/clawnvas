@@ -7,6 +7,8 @@ import {
   HTMLContainer,
   TLOnResizeHandler,
   resizeBox,
+  Geometry2d,
+  Rectangle2d,
 } from '@tldraw/tldraw';
 import { SignalMessage, NodeStatus } from '@/types';
 import { useSignaling } from '@/hooks/useSignaling';
@@ -52,6 +54,14 @@ export class BrowserNodeUtil extends ShapeUtil<BrowserNodeShape> {
       w: shape.props.w,
       h: shape.props.h,
     };
+  }
+
+  getGeometry(shape: BrowserNodeShape): Geometry2d {
+    return new Rectangle2d({
+      width: shape.props.w,
+      height: shape.props.h,
+      isFilled: false,
+    });
   }
 
   canResize = () => true;
