@@ -67,7 +67,7 @@ export default function Canvas() {
 
     // Listen for right-click to add custom menu
     editor.on('event', (event: any) => {
-      if (event.name === 'pointer_down' && event.info.button === 2) {
+      if (event?.name === 'pointer_down' && event.info?.button === 2) {
         // Right-click - will show context menu
       }
     });
