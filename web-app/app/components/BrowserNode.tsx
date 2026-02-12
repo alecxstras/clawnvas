@@ -191,7 +191,15 @@ function BrowserNodeComponent({ shape }: { shape: BrowserNodeShape }) {
   });
 
   const handleConnect = useCallback(async () => {
-    if (!nodeId) return;
+    console.log('[Connect] Button clicked, nodeId:', nodeId, 'ownerToken:', ownerToken);
+    if (!nodeId) {
+      alert('No node ID');
+      return;
+    }
+    if (!ownerToken) {
+      alert('No owner token - recreate the node');
+      return;
+    }
     setIsLoading(true);
     
     try {
