@@ -320,7 +320,40 @@ function BrowserNodeComponent({ shape }: { shape: BrowserNodeShape }) {
                   <div className="text-4xl mb-2">🌐</div>
                   <span className="text-sm mb-4">Browser session</span>
                   <button
-                    onClick={handleConnect}
+                    onClick={() => {
+                      console.log('CONNECT BUTTON CLICKED');
+                      console.log('nodeId:', nodeId);
+                      console.log('ownerToken:', ownerToken);
+                      if (!nodeId || !ownerToken) {
+                        alert('Missing node data. Please recreate the session.');
+                        return;
+                      }
+                      setIsLoading(true);
+                      fetch(`${DESKTOP_HELPER_URL}/create-session`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                          nodeId,
+                          ownerToken,
+                          title: `Browser Session - ${nodeId.slice(0, 8)}`,
+                        }),
+                      })
+                        .then(res => {
+                          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                          return res.json();
+                        })
+                        .then(() => getViewerToken(nodeId))
+                        .then(({ viewerToken }) => {
+                          setToken(viewerToken);
+                          setLocalStatus('connecting');
+                          connect();
+                        })
+                        .catch(err => {
+                          console.error('Connect failed:', err);
+                          alert('Failed to connect: ' + err.message);
+                          setIsLoading(false);
+                        });
+                    }}
                     className="px-4 py-2 bg-blue-500 text-white text-sm rounded-lg hover:bg-blue-600 transition-colors"
                   >
                     Connect
