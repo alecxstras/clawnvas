@@ -154,38 +154,41 @@ function BrowserNodeComponent({ shape }: { shape: BrowserNodeShape }) {
     const handleClick = (e: CustomEvent) => {
       if (e.detail.nodeId === nodeId && localStatus === 'idle') {
         console.log('[BrowserNode] Shape clicked, auto-connecting...');
-        // Auto-trigger connect
-        setIsLoading(true);
-        fetch(`${DESKTOP_HELPER_URL}/create-session`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            nodeId,
-            ownerToken,
-            title: `Browser Session - ${nodeId.slice(0, 8)}`,
-          }),
-        })
-          .then(res => {
-            if (!res.ok) throw new Error(`HTTP ${res.status}`);
-            return res.json();
+        // Auto-trigger connect - use ref to avoid dependency issues
+        const doConnect = () => {
+          setIsLoading(true);
+          fetch(`${DESKTOP_HELPER_URL}/create-session`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              nodeId,
+              ownerToken,
+              title: `Browser Session - ${nodeId.slice(0, 8)}`,
+            }),
           })
-          .then(() => getViewerToken(nodeId))
-          .then(({ viewerToken }) => {
-            setToken(viewerToken);
-            setLocalStatus('connecting');
-            connect();
-          })
-          .catch(err => {
-            console.error('Connect failed:', err);
-            alert('Failed to connect: ' + err.message);
-            setIsLoading(false);
-          });
+            .then(res => {
+              if (!res.ok) throw new Error(`HTTP ${res.status}`);
+              return res.json();
+            })
+            .then(() => getViewerToken(nodeId))
+            .then(({ viewerToken }) => {
+              setToken(viewerToken);
+              setLocalStatus('connecting');
+            })
+            .catch(err => {
+              console.error('Connect failed:', err);
+              alert('Failed to connect: ' + err.message);
+              setIsLoading(false);
+            });
+        };
+        doConnect();
       }
     };
     
     window.addEventListener('browser-node-click', handleClick as EventListener);
     return () => window.removeEventListener('browser-node-click', handleClick as EventListener);
-  }, [nodeId, ownerToken, localStatus, connect]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [nodeId, ownerToken, localStatus]);
 
   const handleSignalMessage = useCallback(async (msg: SignalMessage) => {
     if (msg.nodeId !== nodeId) return;
