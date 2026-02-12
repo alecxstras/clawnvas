@@ -13,7 +13,15 @@ let sessionManager: SessionManager;
 
 // Express HTTP server for web app to trigger window creation
 const httpApp = express();
-httpApp.use(cors());
+
+// CORS - allow web app to call desktop helper
+httpApp.use(cors({
+  origin: ['http://localhost:3000', 'http://127.0.0.1:3000'],
+  methods: ['GET', 'POST', 'OPTIONS'],
+  allowedHeaders: ['Content-Type'],
+  credentials: false
+}));
+
 httpApp.use(express.json());
 
 function createMainWindow() {
