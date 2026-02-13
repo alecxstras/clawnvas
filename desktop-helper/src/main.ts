@@ -86,7 +86,7 @@ function setupHttpServer() {
       res.json({ 
         success: true, 
         nodeId: session.id,
-        message: 'Window created and ready for WebRTC'
+        message: 'Window created'
       });
     } catch (error) {
       console.error('[HTTP] Failed to create session:', error);
@@ -94,6 +94,30 @@ function setupHttpServer() {
         error: 'Failed to create session',
         message: (error as Error).message 
       });
+    }
+  });
+
+  // GET /frame/:nodeId - Get latest frame as PNG
+  httpApp.get('/frame/:nodeId', async (req, res) => {
+    const { nodeId } = req.params;
+    
+    try {
+      // Capture fresh frame
+      const frame = await sessionManager.captureFrame(nodeId);
+      
+      if (!frame) {
+        return res.status(404).json({ error: 'No frame available' });
+      }
+      
+      // Store for next request (optional caching)
+      sessionManager.storeFrame(nodeId, frame);
+      
+      res.setHeader('Content-Type', 'image/png');
+      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+      res.send(frame);
+    } catch (error) {
+      console.error('[HTTP] Failed to capture frame:', error);
+      res.status(500).json({ error: 'Failed to capture frame' });
     }
   });
 
@@ -109,6 +133,7 @@ function setupHttpServer() {
   httpApp.listen(3002, () => {
     console.log('[DESKTOP] HTTP server listening on port 3002');
     console.log('[DESKTOP] POST http://localhost:3002/create-session');
+    console.log('[DESKTOP] GET  http://localhost:3002/frame/:nodeId');
   });
 }
 

@@ -10,10 +10,8 @@ import {
   Geometry2d,
   Rectangle2d,
 } from '@tldraw/tldraw';
-import { SignalMessage, NodeStatus } from '@/types';
-import { useSignaling } from '@/hooks/useSignaling';
-import { useWebRTC } from '@/hooks/useWebRTC';
-import { getViewerToken, revokeNode } from '@/lib/canvas';
+import { NodeStatus } from '@/types';
+import { revokeNode } from '@/lib/canvas';
 
 // Desktop Helper URL
 const DESKTOP_HELPER_URL = 'http://localhost:3002';
@@ -78,7 +76,6 @@ export class BrowserNodeUtil extends ShapeUtil<BrowserNodeShape> {
   };
 
   override onClick(shape: BrowserNodeShape) {
-    // Dispatch custom event that the component can listen for
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('browser-node-click', { 
         detail: { nodeId: shape.props.nodeId, ownerToken: shape.props.ownerToken }
@@ -103,21 +100,17 @@ export class BrowserNodeUtil extends ShapeUtil<BrowserNodeShape> {
   }
 }
 
-// Component implementation
+// Component implementation - SIMPLIFIED: uses HTTP frame streaming
 function BrowserNodeComponent({ shape }: { shape: BrowserNodeShape }) {
-  const { nodeId, title, status, viewerCount, w, h, ownerToken } = shape.props;
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const connectBtnRef = useRef<HTMLButtonElement>(null);
-  const [localStatus, setLocalStatus] = useState<NodeStatus>(status);
-  const [localViewerCount, setLocalViewerCount] = useState(viewerCount);
+  const { nodeId, title, w, h, ownerToken } = shape.props;
+  const [localStatus, setLocalStatus] = useState<NodeStatus>('idle');
   const [isLoading, setIsLoading] = useState(false);
-  const [token, setToken] = useState<string | null>(null);
-  const [lastHeartbeat, setLastHeartbeat] = useState<number | null>(null);
-  const [heartbeatData, setHeartbeatData] = useState<any>(null);
-  const [webrtcState, setWebrtcState] = useState<string>('new');
-  const [captureError, setCaptureError] = useState<string | null>(null);
+  const [frameUrl, setFrameUrl] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const connectBtnRef = useRef<HTMLButtonElement>(null);
+  const frameIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Attach click handler to button via ref to bypass tldraw event interception
+  // Attach click handler to button via ref
   useEffect(() => {
     const btn = connectBtnRef.current;
     if (!btn || localStatus !== 'idle') return;
@@ -125,187 +118,47 @@ function BrowserNodeComponent({ shape }: { shape: BrowserNodeShape }) {
     const handleClick = (e: MouseEvent) => {
       e.stopPropagation();
       e.preventDefault();
-      console.log('[Connect] Button ref clicked!');
-      
-      if (!nodeId || !ownerToken) {
-        alert('Missing node data. Please recreate the session.');
-        return;
-      }
-
-      setIsLoading(true);
-      fetch(`${DESKTOP_HELPER_URL}/create-session`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          nodeId,
-          ownerToken,
-          title: `Browser Session - ${nodeId.slice(0, 8)}`,
-        }),
-      })
-        .then(res => {
-          if (!res.ok) throw new Error(`HTTP ${res.status}`);
-          return res.json();
-        })
-        .then(() => getViewerToken(nodeId))
-        .then(({ viewerToken }) => {
-          setToken(viewerToken);
-          setLocalStatus('connecting');
-          window.dispatchEvent(new CustomEvent('browser-node-connect', {
-            detail: { nodeId, viewerToken }
-          }));
-        })
-        .catch(err => {
-          console.error('Connect failed:', err);
-          alert('Failed to connect: ' + err.message);
-          setIsLoading(false);
-        });
+      handleConnect();
     };
 
     btn.addEventListener('click', handleClick);
-    console.log('[Connect] Button ref attached');
-    
-    return () => {
-      btn.removeEventListener('click', handleClick);
-    };
+    return () => btn.removeEventListener('click', handleClick);
   }, [nodeId, ownerToken, localStatus]);
 
-  const handleRemoteStream = useCallback((stream: MediaStream) => {
-    console.log('[WebRTC] Remote stream received:', stream.getVideoTracks()[0]?.label);
-    if (videoRef.current) {
-      videoRef.current.srcObject = stream;
-      setLocalStatus('live');
-      console.log('[WebRTC] Stream attached to video element');
-    }
-  }, []);
-
-  const handleIceCandidate = useCallback((candidate: RTCIceCandidate) => {
-    send({
-      type: 'ice',
-      nodeId,
-      candidate: candidate.toJSON(),
-    });
-  }, [nodeId]);
-
-  const { connectionState, handleOffer, addIceCandidate, connect: connectWebRTC, close } = useWebRTC({
-    nodeId,
-    onRemoteStream: handleRemoteStream,
-    onIceCandidate: handleIceCandidate,
-  });
-
-  // Update local status based on WebRTC connection state
+  // Start polling for frames when live
   useEffect(() => {
-    console.log('[BrowserNode] WebRTC state:', connectionState);
-    if (connectionState === 'connected' || connectionState === 'completed') {
-      setLocalStatus('live');
-    } else if (connectionState === 'failed' || connectionState === 'closed') {
-      setLocalStatus('offline');
+    if (localStatus === 'live') {
+      // Poll for new frame every 100ms
+      frameIntervalRef.current = setInterval(() => {
+        // Add timestamp to prevent caching
+        setFrameUrl(`${DESKTOP_HELPER_URL}/frame/${nodeId}?t=${Date.now()}`);
+      }, 100);
+    } else {
+      if (frameIntervalRef.current) {
+        clearInterval(frameIntervalRef.current);
+        frameIntervalRef.current = null;
+      }
+      setFrameUrl(null);
     }
-  }, [connectionState]);
 
-  // Listen for connect event from Canvas
-  useEffect(() => {
-    const handleConnect = (e: CustomEvent) => {
-      if (e.detail.nodeId === nodeId) {
-        console.log('[BrowserNode] Received connect event, starting WebRTC...');
-        setToken(e.detail.viewerToken);
-        setLocalStatus('connecting');
-        // The useEffect below will trigger when token changes
+    return () => {
+      if (frameIntervalRef.current) {
+        clearInterval(frameIntervalRef.current);
       }
     };
-    
-    window.addEventListener('browser-node-connect', handleConnect as EventListener);
-    return () => window.removeEventListener('browser-node-connect', handleConnect as EventListener);
-  }, [nodeId]);
-
-  // Trigger signaling connection when we have a token
-  useEffect(() => {
-    if (token && localStatus === 'connecting') {
-      console.log('[BrowserNode] Token acquired, waiting for desktop to be ready...');
-      // Small delay to ensure Desktop is registered with signaling server
-      const timer = setTimeout(() => {
-        console.log('[BrowserNode] Connecting to signaling and WebRTC...');
-        connect(); // Connect to signaling server
-        connectWebRTC(); // Start WebRTC
-      }, 500);
-      return () => clearTimeout(timer);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token, localStatus]);
-
-  const handleSignalMessage = useCallback(async (msg: SignalMessage) => {
-    if (msg.nodeId !== nodeId) return;
-
-    switch (msg.type) {
-      case 'offer':
-        console.log('[BrowserNode] ========== RECEIVED OFFER ==========');
-        try {
-          console.log('[BrowserNode] Creating answer...');
-          const answer = await handleOffer(msg.sdp);
-          console.log('[BrowserNode] Answer created, sending to desktop...');
-          send({
-            type: 'answer',
-            nodeId,
-            sdp: answer,
-          });
-          console.log('[BrowserNode] ========== ANSWER SENT ==========');
-        } catch (err) {
-          console.error('[BrowserNode] Failed to handle offer:', err);
-        }
-        break;
-      case 'ice':
-        console.log('[BrowserNode] Received ICE candidate from desktop');
-        try {
-          await addIceCandidate(msg.candidate);
-          console.log('[BrowserNode] ICE candidate added');
-        } catch (err) {
-          console.error('[BrowserNode] Failed to add ICE:', err);
-        }
-        break;
-      case 'viewer-count':
-        setLocalViewerCount(msg.count);
-        break;
-      case 'heartbeat':
-        // Signal loop validation: Desktop -> Server -> Web App
-        setLastHeartbeat(Date.now());
-        setHeartbeatData(msg.payload);
-        console.log('[Heartbeat] Desktop helper is alive:', msg.payload);
-        break;
-      case 'capture-error':
-        console.error('[Capture] Error from desktop:', msg.error);
-        setCaptureError(msg.error);
-        // Still show as connecting since we fallback to webcam
-        break;
-      case 'revoke':
-        setLocalStatus('offline');
-        close();
-        break;
-      case 'error':
-        console.error('Signaling error:', msg.message);
-        setLocalStatus('offline');
-        break;
-    }
-  }, [nodeId, handleOffer, addIceCandidate, close]);
-
-  const { isConnected, send, connect, disconnect } = useSignaling({
-    nodeId,
-    token: token || undefined,
-    onMessage: handleSignalMessage,
-  });
+  }, [localStatus, nodeId]);
 
   const handleConnect = useCallback(async () => {
-    console.log('[Connect] Button clicked, nodeId:', nodeId, 'ownerToken:', ownerToken);
-    if (!nodeId) {
-      alert('No node ID');
+    if (!nodeId || !ownerToken) {
+      alert('Missing node data. Please recreate the session.');
       return;
     }
-    if (!ownerToken) {
-      alert('No owner token - recreate the node');
-      return;
-    }
+
     setIsLoading(true);
-    
+    setError(null);
+
     try {
-      // 1. Tell Desktop Helper to open browser window
+      // Tell Desktop Helper to open browser window
       const response = await fetch(`${DESKTOP_HELPER_URL}/create-session`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -317,37 +170,31 @@ function BrowserNodeComponent({ shape }: { shape: BrowserNodeShape }) {
       });
 
       if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Desktop helper error ${response.status}: ${errorText}`);
+        const errText = await response.text();
+        throw new Error(`HTTP ${response.status}: ${errText}`);
       }
 
-      const result = await response.json();
-
-      // 2. Get viewer token and connect
-      const { viewerToken } = await getViewerToken(nodeId);
-      setToken(viewerToken);
-      setLocalStatus('connecting');
-      connect();
+      // Success! Window is open, now start showing frames
+      setLocalStatus('live');
+      
     } catch (err) {
-      console.error('[Connect] Failed:', err);
-      alert(`Failed: ${(err as Error).message}`);
+      console.error('Connect failed:', err);
+      setError((err as Error).message);
       setLocalStatus('idle');
     } finally {
       setIsLoading(false);
     }
-  }, [nodeId, ownerToken, connect]);
+  }, [nodeId, ownerToken]);
 
   const handleStop = useCallback(async () => {
     if (!nodeId) return;
     try {
       await revokeNode(nodeId);
-      disconnect();
-      close();
       setLocalStatus('offline');
     } catch (err) {
       console.error('Failed to stop:', err);
     }
-  }, [nodeId, disconnect, close]);
+  }, [nodeId]);
 
   const statusColors = {
     idle: 'bg-gray-400',
@@ -357,13 +204,7 @@ function BrowserNodeComponent({ shape }: { shape: BrowserNodeShape }) {
   };
 
   return (
-    <HTMLContainer
-      style={{
-        width: w,
-        height: h,
-        pointerEvents: 'all',
-      }}
-    >
+    <HTMLContainer style={{ width: w, height: h, pointerEvents: 'all' }}>
       <div className="w-full h-full bg-white rounded-lg shadow-lg border border-gray-200 overflow-hidden flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between px-3 py-2 bg-gray-50 border-b border-gray-200">
@@ -373,47 +214,37 @@ function BrowserNodeComponent({ shape }: { shape: BrowserNodeShape }) {
               {title}
             </span>
           </div>
-          <div className="flex items-center gap-2">
-            {/* Heartbeat indicator - shows signaling is working */}
-            {lastHeartbeat && (
-              <span
-                className="text-[10px] px-1.5 py-0.5 bg-green-100 text-green-700 rounded"
-                title={heartbeatData ? `URL: ${heartbeatData.url}` : 'Signaling connected'}
-              >
-                ● {Math.round((Date.now() - lastHeartbeat) / 1000)}s ago
-              </span>
-            )}
-            {localStatus === 'live' && (
-              <span className="text-xs text-gray-500">
-                {localViewerCount} viewing
-              </span>
-            )}
-          </div>
+          {localStatus === 'live' && (
+            <span className="text-xs text-gray-500">Live</span>
+          )}
         </div>
 
         {/* Content */}
-        <div className="flex-1 relative bg-gray-900">
-          {localStatus === 'live' ? (
-            <video
-              ref={videoRef}
-              autoPlay
-              playsInline
+        <div className="flex-1 relative bg-gray-900 overflow-hidden">
+          {localStatus === 'live' && frameUrl ? (
+            <img
+              src={frameUrl}
+              alt="Browser Stream"
               className="w-full h-full object-contain"
+              style={{ imageRendering: 'auto' }}
             />
           ) : (
             <div className="absolute inset-0 flex flex-col items-center justify-center text-gray-400">
               {isLoading ? (
                 <>
                   <div className="w-8 h-8 border-2 border-gray-400 border-t-transparent rounded-full animate-spin mb-2" />
-                  <span className="text-sm">Connecting...</span>
-                  <span className="text-xs text-gray-500 mt-1">{connectionState}</span>
-                  {token && <span className="text-xs text-green-500 mt-1">✓ Token acquired</span>}
-                  {isConnected && <span className="text-xs text-green-500 mt-1">✓ Signaling connected</span>}
-                  {captureError && (
-                    <span className="text-xs text-amber-500 mt-2 max-w-[200px] text-center">
-                      ⚠️ {captureError}
-                    </span>
-                  )}
+                  <span className="text-sm">Opening browser...</span>
+                </>
+              ) : error ? (
+                <>
+                  <div className="text-4xl mb-2">⚠️</div>
+                  <span className="text-sm text-red-400">{error}</span>
+                  <button
+                    onClick={handleConnect}
+                    className="mt-4 px-4 py-2 bg-blue-500 text-white text-sm rounded-lg hover:bg-blue-600"
+                  >
+                    Retry
+                  </button>
                 </>
               ) : localStatus === 'offline' ? (
                 <>
@@ -440,11 +271,6 @@ function BrowserNodeComponent({ shape }: { shape: BrowserNodeShape }) {
         <div className="flex items-center justify-between px-3 py-2 bg-gray-50 border-t border-gray-200">
           <div className="flex items-center gap-2">
             <span className="text-xs text-gray-400">ID: {nodeId.slice(0, 8)}...</span>
-            {localStatus === 'connecting' && connectionState !== 'new' && (
-              <span className="text-[10px] px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded">
-                {connectionState}
-              </span>
-            )}
           </div>
           {localStatus === 'live' && (
             <button
@@ -459,3 +285,5 @@ function BrowserNodeComponent({ shape }: { shape: BrowserNodeShape }) {
     </HTMLContainer>
   );
 }
+
+export default BrowserNodeUtil;
