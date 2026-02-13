@@ -220,8 +220,9 @@ function BrowserNodeComponent({ shape }: { shape: BrowserNodeShape }) {
   // Trigger signaling connection when we have a token
   useEffect(() => {
     if (token && localStatus === 'connecting') {
-      console.log('[BrowserNode] Token acquired, connecting to signaling...');
-      connectWebRTC();
+      console.log('[BrowserNode] Token acquired, connecting to signaling and WebRTC...');
+      connect(); // Connect to signaling server
+      connectWebRTC(); // Start WebRTC
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token, localStatus]);
@@ -390,6 +391,9 @@ function BrowserNodeComponent({ shape }: { shape: BrowserNodeShape }) {
                 <>
                   <div className="w-8 h-8 border-2 border-gray-400 border-t-transparent rounded-full animate-spin mb-2" />
                   <span className="text-sm">Connecting...</span>
+                  <span className="text-xs text-gray-500 mt-1">{connectionState}</span>
+                  {token && <span className="text-xs text-green-500 mt-1">✓ Token acquired</span>}
+                  {isConnected && <span className="text-xs text-green-500 mt-1">✓ Signaling connected</span>}
                   {captureError && (
                     <span className="text-xs text-amber-500 mt-2 max-w-[200px] text-center">
                       ⚠️ {captureError}
