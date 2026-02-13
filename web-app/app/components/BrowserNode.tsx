@@ -10,19 +10,29 @@ import {
   Geometry2d,
   Rectangle2d,
 } from '@tldraw/tldraw';
+import { NodeStatus } from '@/types';
+import { revokeNode } from '@/lib/canvas';
 
+// Desktop Helper URL
 const DESKTOP_HELPER_URL = 'http://localhost:3002';
 
+// Shape type definition
 type BrowserNodeShape = TLBaseShape<
   'browser-node',
   {
     w: number;
     h: number;
     nodeId: string;
+    ownerToken: string;
+    ownerId: string;
     title: string;
+    status: NodeStatus;
+    viewerCount: number;
+    createdAt: number;
   }
 >;
 
+// Shape util for tldraw
 export class BrowserNodeUtil extends ShapeUtil<BrowserNodeShape> {
   static override type = 'browser-node' as const;
 
@@ -31,7 +41,21 @@ export class BrowserNodeUtil extends ShapeUtil<BrowserNodeShape> {
       w: 400,
       h: 300,
       nodeId: '',
-      title: 'Browser',
+      ownerToken: '',
+      ownerId: '',
+      title: 'Browser Session',
+      status: 'idle',
+      viewerCount: 0,
+      createdAt: Date.now(),
+    };
+  }
+
+  getBounds(shape: BrowserNodeShape) {
+    return {
+      x: shape.x,
+      y: shape.y,
+      w: shape.props.w,
+      h: shape.props.h,
     };
   }
 
@@ -51,6 +75,14 @@ export class BrowserNodeUtil extends ShapeUtil<BrowserNodeShape> {
     return resizeBox(shape, info);
   };
 
+  override onClick(shape: BrowserNodeShape) {
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('browser-node-click', { 
+        detail: { nodeId: shape.props.nodeId, ownerToken: shape.props.ownerToken }
+      }));
+    }
+  }
+
   component(shape: BrowserNodeShape) {
     return <BrowserNodeComponent shape={shape} />;
   }
@@ -68,101 +100,185 @@ export class BrowserNodeUtil extends ShapeUtil<BrowserNodeShape> {
   }
 }
 
+// Component implementation - SIMPLIFIED: uses HTTP frame streaming
 function BrowserNodeComponent({ shape }: { shape: BrowserNodeShape }) {
-  const { nodeId, title, w, h } = shape.props;
-  const [isConnected, setIsConnected] = useState(false);
+  const { nodeId, title, w, h, ownerToken } = shape.props;
+  const [localStatus, setLocalStatus] = useState<NodeStatus>('idle');
   const [isLoading, setIsLoading] = useState(false);
   const [frameUrl, setFrameUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  const connectBtnRef = useRef<HTMLButtonElement>(null);
+  const frameIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Attach click handler to button via ref
+  useEffect(() => {
+    const btn = connectBtnRef.current;
+    if (!btn || localStatus !== 'idle') return;
+
+    const handleClick = (e: MouseEvent) => {
+      e.stopPropagation();
+      e.preventDefault();
+      handleConnect();
+    };
+
+    btn.addEventListener('click', handleClick);
+    return () => btn.removeEventListener('click', handleClick);
+  }, [nodeId, ownerToken, localStatus]);
+
+  // Start polling for frames when live
+  useEffect(() => {
+    if (localStatus === 'live') {
+      // Poll for new frame every 100ms
+      frameIntervalRef.current = setInterval(() => {
+        // Add timestamp to prevent caching
+        setFrameUrl(`${DESKTOP_HELPER_URL}/frame/${nodeId}?t=${Date.now()}`);
+      }, 100);
+    } else {
+      if (frameIntervalRef.current) {
+        clearInterval(frameIntervalRef.current);
+        frameIntervalRef.current = null;
+      }
+      setFrameUrl(null);
+    }
+
+    return () => {
+      if (frameIntervalRef.current) {
+        clearInterval(frameIntervalRef.current);
+      }
+    };
+  }, [localStatus, nodeId]);
 
   const handleConnect = useCallback(async () => {
+    if (!nodeId || !ownerToken) {
+      alert('Missing node data. Please recreate the session.');
+      return;
+    }
+
     setIsLoading(true);
     setError(null);
 
     try {
-      // Create browser window
-      const res = await fetch(`${DESKTOP_HELPER_URL}/create-session`, {
+      // Tell Desktop Helper to open browser window
+      const response = await fetch(`${DESKTOP_HELPER_URL}/create-session`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           nodeId,
-          ownerToken: 'test',
-          title: `Browser - ${nodeId.slice(0, 8)}`,
+          ownerToken,
+          title: `Browser Session - ${nodeId.slice(0, 8)}`,
         }),
       });
 
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      if (!response.ok) {
+        const errText = await response.text();
+        throw new Error(`HTTP ${response.status}: ${errText}`);
+      }
 
-      setIsConnected(true);
+      // Success! Window is open, now start showing frames
+      setLocalStatus('live');
+      
     } catch (err) {
+      console.error('Connect failed:', err);
       setError((err as Error).message);
+      setLocalStatus('idle');
     } finally {
       setIsLoading(false);
     }
+  }, [nodeId, ownerToken]);
+
+  const handleStop = useCallback(async () => {
+    if (!nodeId) return;
+    try {
+      await revokeNode(nodeId);
+      setLocalStatus('offline');
+    } catch (err) {
+      console.error('Failed to stop:', err);
+    }
   }, [nodeId]);
 
-  // Poll for frames when connected
-  useEffect(() => {
-    if (isConnected) {
-      intervalRef.current = setInterval(() => {
-        setFrameUrl(`${DESKTOP_HELPER_URL}/frame/${nodeId}?t=${Date.now()}`);
-      }, 100);
-    } else {
-      if (intervalRef.current) clearInterval(intervalRef.current);
-      setFrameUrl(null);
-    }
-    return () => {
-      if (intervalRef.current) clearInterval(intervalRef.current);
-    };
-  }, [isConnected, nodeId]);
+  const statusColors = {
+    idle: 'bg-gray-400',
+    connecting: 'bg-blue-400',
+    live: 'bg-green-500 animate-pulse',
+    offline: 'bg-red-400',
+  };
 
   return (
     <HTMLContainer style={{ width: w, height: h, pointerEvents: 'all' }}>
       <div className="w-full h-full bg-white rounded-lg shadow-lg border border-gray-200 overflow-hidden flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between px-3 py-2 bg-gray-50 border-b border-gray-200">
-          <span className="text-sm font-medium text-gray-700 truncate">{title}</span>
-          {isConnected && <span className="text-xs text-green-500">● Live</span>}
+          <div className="flex items-center gap-2">
+            <div className={`w-2 h-2 rounded-full ${statusColors[localStatus]}`} />
+            <span className="text-sm font-medium text-gray-700 truncate max-w-[120px]">
+              {title}
+            </span>
+          </div>
+          {localStatus === 'live' && (
+            <span className="text-xs text-gray-500">Live</span>
+          )}
         </div>
 
         {/* Content */}
-        <div className="flex-1 relative bg-gray-900">
-          {isConnected && frameUrl ? (
+        <div className="flex-1 relative bg-gray-900 overflow-hidden">
+          {localStatus === 'live' && frameUrl ? (
             <img
               src={frameUrl}
-              alt="Stream"
+              alt="Browser Stream"
               className="w-full h-full object-contain"
+              style={{ imageRendering: 'auto' }}
             />
           ) : (
             <div className="absolute inset-0 flex flex-col items-center justify-center text-gray-400">
               {isLoading ? (
                 <>
                   <div className="w-8 h-8 border-2 border-gray-400 border-t-transparent rounded-full animate-spin mb-2" />
-                  <span className="text-sm">Connecting...</span>
+                  <span className="text-sm">Opening browser...</span>
                 </>
               ) : error ? (
                 <>
+                  <div className="text-4xl mb-2">⚠️</div>
                   <span className="text-sm text-red-400">{error}</span>
                   <button
                     onClick={handleConnect}
-                    className="mt-2 px-3 py-1 bg-blue-500 text-white text-xs rounded"
+                    className="mt-4 px-4 py-2 bg-blue-500 text-white text-sm rounded-lg hover:bg-blue-600"
                   >
                     Retry
                   </button>
                 </>
+              ) : localStatus === 'offline' ? (
+                <>
+                  <div className="text-4xl mb-2">📴</div>
+                  <span className="text-sm">Session ended</span>
+                </>
               ) : (
                 <>
-                  <span className="text-sm mb-2">Browser Session</span>
+                  <div className="text-4xl mb-2">🌐</div>
+                  <span className="text-sm mb-4">Browser session</span>
                   <button
-                    onClick={handleConnect}
-                    className="px-4 py-2 bg-blue-500 text-white text-sm rounded-lg hover:bg-blue-600"
+                    ref={connectBtnRef}
+                    className="px-4 py-2 bg-blue-500 text-white text-sm rounded-lg hover:bg-blue-600 transition-colors"
                   >
                     Connect
                   </button>
                 </>
               )}
             </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="flex items-center justify-between px-3 py-2 bg-gray-50 border-t border-gray-200">
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-gray-400">ID: {nodeId.slice(0, 8)}...</span>
+          </div>
+          {localStatus === 'live' && (
+            <button
+              onClick={handleStop}
+              className="px-3 py-1 bg-red-500 text-white text-xs rounded hover:bg-red-600 transition-colors"
+            >
+              Stop
+            </button>
           )}
         </div>
       </div>
