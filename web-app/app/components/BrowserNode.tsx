@@ -94,13 +94,18 @@ export class BrowserNodeUtil extends ShapeUtil<BrowserNodeShape> {
 
 // Component implementation - SIMPLIFIED: uses HTTP frame streaming
 function BrowserNodeComponent({ shape }: { shape: BrowserNodeShape }) {
-  const { nodeId, title, w, h, ownerToken } = shape.props;
-  const [localStatus, setLocalStatus] = useState<NodeStatus>('idle');
+  const { nodeId, title, w, h, ownerToken, status: shapeStatus } = shape.props;
+  const [localStatus, setLocalStatus] = useState<NodeStatus>(shapeStatus);
   const [isLoading, setIsLoading] = useState(false);
   const [frameUrl, setFrameUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const connectBtnRef = useRef<HTMLButtonElement>(null);
   const frameIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Sync local status with shape status
+  useEffect(() => {
+    setLocalStatus(shapeStatus);
+  }, [shapeStatus]);
 
   // Attach click handler to button via ref
   useEffect(() => {
