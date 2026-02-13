@@ -133,7 +133,7 @@ function BrowserNodeComponent({ shape }: { shape: BrowserNodeShape }) {
     });
   }, [nodeId]);
 
-  const { connectionState, handleOffer, addIceCandidate, connect, close } = useWebRTC({
+  const { connectionState, handleOffer, addIceCandidate, connect: connectWebRTC, close } = useWebRTC({
     nodeId,
     onRemoteStream: handleRemoteStream,
     onIceCandidate: handleIceCandidate,
@@ -168,7 +168,7 @@ function BrowserNodeComponent({ shape }: { shape: BrowserNodeShape }) {
   useEffect(() => {
     if (token && localStatus === 'connecting') {
       console.log('[BrowserNode] Token acquired, connecting to signaling...');
-      connect();
+      connectWebRTC();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token, localStatus]);
