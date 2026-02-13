@@ -118,6 +118,7 @@ export default function Canvas() {
   const [isCreating, setIsCreating] = useState(false);
 
   const lastSelectedId = useRef<string | null>(null);
+  const selectedBrowserNode = useRef<any>(null);
 
   const handleMount = useCallback((editor: any) => {
     // Store editor reference globally for shape access
