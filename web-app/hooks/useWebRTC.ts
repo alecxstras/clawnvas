@@ -85,12 +85,21 @@ export function useWebRTC({ nodeId, onRemoteStream, onIceCandidate }: UseWebRTCO
     setConnectionState('closed');
   }, []);
 
+  // Connect function - for viewers to start WebRTC connection
+  const connect = useCallback(async () => {
+    console.log('[WebRTC] Viewer connecting...');
+    // For viewers, we just need to be ready to receive offers
+    // The actual connection starts when we get an offer from the publisher
+    createPeerConnection();
+  }, [createPeerConnection]);
+
   return {
     connectionState,
     createOffer,
     handleOffer,
     handleAnswer,
     addIceCandidate,
+    connect,
     close,
   };
 }
