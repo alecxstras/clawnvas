@@ -379,7 +379,10 @@ function BrowserNodeComponent({ shape }: { shape: BrowserNodeShape }) {
                         .then(({ viewerToken }) => {
                           setToken(viewerToken);
                           setLocalStatus('connecting');
-                          connect();
+                          // Trigger WebRTC connection via event
+                          window.dispatchEvent(new CustomEvent('browser-node-connect', {
+                            detail: { nodeId, viewerToken }
+                          }));
                         })
                         .catch(err => {
                           console.error('Connect failed:', err);
