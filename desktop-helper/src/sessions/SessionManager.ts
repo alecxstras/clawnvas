@@ -258,6 +258,28 @@ export class SessionManager {
           console.error('[Capture] System Preferences → Security & Privacy → Screen Recording');
         }
         
+        // Fallback: try to capture entire screen
+        const screenSource = sources.find(s => s.name === 'Entire Screen' || s.name.includes('Screen'));
+        if (screenSource) {
+          console.log('[Capture] Falling back to entire screen capture');
+          const stream = await navigator.mediaDevices.getUserMedia({
+            audio: false,
+            video: {
+              mandatory: {
+                chromeMediaSource: 'desktop',
+                chromeMediaSourceId: screenSource.id,
+                minWidth: 1280,
+                maxWidth: 1920,
+                minHeight: 720,
+                maxHeight: 1080,
+                maxFrameRate: 30,
+              },
+            },
+          } as any);
+          console.log('[Capture] Screen capture started (fallback)');
+          return stream;
+        }
+        
         throw new Error('Window not found - check screen recording permissions');
       }
 
@@ -283,6 +305,11 @@ export class SessionManager {
 
       console.log('[Capture] Desktop capture started successfully');
       console.log(`[Capture] Stream has ${stream.getVideoTracks().length} video track(s)`);
+      
+      // Log track info for debugging
+      stream.getVideoTracks().forEach((track, i) => {
+        console.log(`[Capture] Track ${i}: ${track.label}, enabled: ${track.enabled}, readyState: ${track.readyState}`);
+      });
       
       return stream;
 
