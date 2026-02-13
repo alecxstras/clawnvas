@@ -31,17 +31,31 @@ export function useWebRTC({ nodeId, onRemoteStream, onIceCandidate }: UseWebRTCO
       console.log('[WebRTC] ICE state changed:', pc.iceConnectionState);
     };
 
+    pc.onicegatheringstatechange = () => {
+      console.log('[WebRTC] ICE gathering state:', pc.iceGatheringState);
+    };
+
+    pc.onicecandidateerror = (event: any) => {
+      console.error('[WebRTC] ICE candidate error:', event.errorText);
+    };
+
     pc.ontrack = (event) => {
-      console.log('[WebRTC] Track received:', event.track.kind, event.track.id);
+      console.log('[WebRTC] ========== TRACK RECEIVED ==========');
+      console.log('[WebRTC] Track kind:', event.track.kind);
+      console.log('[WebRTC] Track id:', event.track.id);
+      console.log('[WebRTC] Streams:', event.streams.length);
       if (event.streams[0]) {
+        console.log('[WebRTC] Calling onRemoteStream with stream');
         onRemoteStream?.(event.streams[0]);
       }
     };
 
     pc.onicecandidate = (event) => {
       if (event.candidate) {
-        console.log('[WebRTC] Generated ICE candidate:', event.candidate.type);
+        console.log('[WebRTC] Generated ICE candidate, sending to desktop');
         onIceCandidate?.(event.candidate);
+      } else {
+        console.log('[WebRTC] ICE gathering complete');
       }
     };
 

@@ -143,29 +143,28 @@ export class SessionManager {
       await this.setupWebRTC(session);
     });
 
-    socket.on('offer', (data: any) => {
-      console.log('[Signaling] Received offer from viewer');
-    });
-
-    socket.on('answer', (data: any) => {
-      console.log('[Signaling] Received answer');
-    });
-
-    socket.on('ice', (data: any) => {
-      console.log('[Signaling] Received ICE candidate');
-    });
-
     socket.on('answer', async (data: { sdp: RTCSessionDescriptionInit }) => {
-      console.log('[Signaling] Received answer');
+      console.log('[Signaling] ========== RECEIVED ANSWER ==========');
       if (session.pc) {
+        console.log('[WebRTC] Setting remote description (answer)...');
         await session.pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
-        console.log('[WebRTC] Remote description set (answer)');
+        console.log('[WebRTC] Remote description set successfully');
+      } else {
+        console.error('[WebRTC] No peer connection when answer received!');
       }
     });
 
     socket.on('ice', async (data: { candidate: RTCIceCandidateInit }) => {
+      console.log('[Signaling] Received ICE candidate from viewer');
       if (session.pc) {
-        await session.pc.addIceCandidate(new RTCIceCandidate(data.candidate));
+        try {
+          await session.pc.addIceCandidate(new RTCIceCandidate(data.candidate));
+          console.log('[WebRTC] ICE candidate added');
+        } catch (err) {
+          console.error('[WebRTC] Failed to add ICE candidate:', err);
+        }
+      } else {
+        console.error('[WebRTC] No peer connection when ICE received!');
       }
     });
 
@@ -210,15 +209,20 @@ export class SessionManager {
         console.log('[WebRTC] ICE gathering state:', pc.iceGatheringState);
       };
 
-      // Handle ICE candidates
+      pc.onicecandidateerror = (event: any) => {
+        console.error('[WebRTC] ICE candidate error:', event.errorText, 'code:', event.errorCode);
+      };
+
+      // Handle ICE candidates - TRICKLE ICE: send as they arrive
       pc.onicecandidate = (event) => {
-        console.log('[WebRTC] onicecandidate event:', event.candidate ? 'has candidate' : 'null');
         if (event.candidate) {
-          console.log('[WebRTC] Sending ICE candidate to viewer');
+          console.log('[WebRTC] Sending ICE candidate to viewer:', event.candidate.candidate.substring(0, 50) + '...');
           session.socket.emit('ice', {
             nodeId: session.nodeId,
             candidate: event.candidate.toJSON(),
           });
+        } else {
+          console.log('[WebRTC] ICE gathering complete (null candidate)');
         }
       };
 

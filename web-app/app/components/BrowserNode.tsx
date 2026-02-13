@@ -232,19 +232,29 @@ function BrowserNodeComponent({ shape }: { shape: BrowserNodeShape }) {
 
     switch (msg.type) {
       case 'offer':
+        console.log('[BrowserNode] ========== RECEIVED OFFER ==========');
         try {
+          console.log('[BrowserNode] Creating answer...');
           const answer = await handleOffer(msg.sdp);
+          console.log('[BrowserNode] Answer created, sending to desktop...');
           send({
             type: 'answer',
             nodeId,
             sdp: answer,
           });
+          console.log('[BrowserNode] ========== ANSWER SENT ==========');
         } catch (err) {
-          console.error('Failed to handle offer:', err);
+          console.error('[BrowserNode] Failed to handle offer:', err);
         }
         break;
       case 'ice':
-        await addIceCandidate(msg.candidate);
+        console.log('[BrowserNode] Received ICE candidate from desktop');
+        try {
+          await addIceCandidate(msg.candidate);
+          console.log('[BrowserNode] ICE candidate added');
+        } catch (err) {
+          console.error('[BrowserNode] Failed to add ICE:', err);
+        }
         break;
       case 'viewer-count':
         setLocalViewerCount(msg.count);
