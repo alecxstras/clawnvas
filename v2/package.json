@@ -1,0 +1,28 @@
+{
+  "name": "clawnvas-v2",
+  "version": "1.0.0",
+  "description": "Collaborative canvas with embedded browser nodes",
+  "main": "dist/main/index.js",
+  "scripts": {
+    "dev": "concurrently \"npm run dev:main\" \"npm run dev:renderer\"",
+    "dev:main": "tsc -p src/main/tsconfig.json --watch",
+    "dev:renderer": "vite",
+    "build": "tsc -p src/main/tsconfig.json && vite build",
+    "start": "electron dist/main/index.js"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/react": "^18.0.0",
+    "@types/react-dom": "^18.0.0",
+    "@vitejs/plugin-react": "^4.0.0",
+    "concurrently": "^8.0.0",
+    "electron": "^28.0.0",
+    "typescript": "^5.0.0",
+    "vite": "^5.0.0"
+  },
+  "dependencies": {
+    "@tldraw/tldraw": "^2.0.0",
+    "react": "^18.0.0",
+    "react-dom": "^18.0.0"
+  }
+}
