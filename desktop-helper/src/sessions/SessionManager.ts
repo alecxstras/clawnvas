@@ -25,68 +25,57 @@ export class SessionManager {
       webPreferences: {
         nodeIntegration: false,
         contextIsolation: true,
+        webviewTag: true,
+        webSecurity: false,
+        allowRunningInsecureContent: true,
       },
     });
 
     const windowId = window.id;
     console.log(`[Session] Created window ${windowId} for node ${nodeId}`);
 
-    // Load a simple browser interface with address bar
-    const browserHTML = `<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="UTF-8">
-  <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: system-ui, sans-serif; }
-    #bar { display: flex; padding: 10px; background: #f1f3f4; border-bottom: 1px solid #dadce0; }
-    #url { flex: 1; padding: 8px 12px; border: 1px solid #dadce0; border-radius: 20px; }
-    #go { margin-left: 10px; padding: 8px 20px; background: #1a73e8; color: white; border: none; border-radius: 4px; cursor: pointer; }
-    #start { display: flex; flex-direction: column; align-items: center; justify-content: center; height: calc(100vh - 60px); }
-    #frame { width: 100%; height: calc(100vh - 60px); border: none; display: none; }
-  </style>
-</head>
-<body>
-  <div id="bar">
-    <input type="text" id="url" placeholder="Enter URL...">
-    <button id="go">Go</button>
-  </div>
-  <div id="start">
-    <h2>Browser Session</h2>
-    <p>Enter a URL to start browsing</p>
-    <p style="font-size: 11px; color: #666; margin-top: 10px;">Try: example.com, wikipedia.org, news.ycombinator.com</p>
-    <p style="font-size: 10px; color: #999;">Note: Google, Facebook block iframe embedding</p>
-  </div>
-  <iframe id="frame"></iframe>
-  <script>
-    const urlInput = document.getElementById('url');
-    const goBtn = document.getElementById('go');
-    const frame = document.getElementById('frame');
-    const start = document.getElementById('start');
+    // Load browser interface
+    window.loadURL('about:blank');
     
-    function navigate() {
-      let url = urlInput.value.trim();
-      if (!url) return;
-      if (!url.match(/^https?:\/\//)) url = 'https://' + url;
-      start.style.display = 'none';
-      frame.style.display = 'block';
-      frame.src = url;
-      console.log('Navigating to:', url);
-    }
-    
-    goBtn.onclick = navigate;
-    urlInput.onkeypress = function(e) { if (e.key === 'Enter') navigate(); };
-    urlInput.focus();
-    
-    // Handle iframe load errors
-    frame.onerror = function() {
-      console.error('Failed to load iframe content');
-    };
-  </script>
-</body>
-</html>`;
-    
-    await window.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(browserHTML));
+    // Set up browser UI via executeJavaScript
+    window.webContents.executeJavaScript(`
+      document.open();
+      document.write(\`
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <style>
+            * { box-sizing: border-box; margin: 0; padding: 0; }
+            body { font-family: system-ui, sans-serif; overflow: hidden; }
+            #bar { display: flex; padding: 10px; background: #333; border-bottom: 1px solid #555; }
+            #url { flex: 1; padding: 10px; border: none; border-radius: 4px; font-size: 14px; }
+            #go { margin-left: 10px; padding: 10px 20px; background: #0066cc; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; }
+            #go:hover { background: #0052a3; }
+            #content { width: 100%; height: calc(100vh - 60px); border: none; }
+          </style>
+        </head>
+        <body>
+          <div id="bar">
+            <input type="text" id="url" placeholder="Enter URL (e.g., example.com)..." value="https://example.com">
+            <button id="go" onclick="go()">Go</button>
+          </div>
+          <webview id="content" src="https://example.com" style="width:100%;height:calc(100vh - 60px);"></webview>
+          <script>
+            function go() {
+              var url = document.getElementById('url').value.trim();
+              if (!url) return;
+              if (url.indexOf('http') !== 0) url = 'https://' + url;
+              document.getElementById('content').src = url;
+            }
+            document.getElementById('url').addEventListener('keypress', function(e) {
+              if (e.key === 'Enter') go();
+            });
+          </script>
+        </body>
+        </html>
+      \`);
+      document.close();
+    `);
 
     // Ensure window is visible and focused
     window.show();
