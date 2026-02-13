@@ -63,26 +63,32 @@ export default function Canvas() {
   const [isCreating, setIsCreating] = useState(false);
 
   const handleMount = useCallback((editor: any) => {
+    // Store editor reference globally for shape access
+    (window as any).__tldraw_editor = editor;
+
     // Add custom context menu item for creating browser nodes
     editor.registerExternalAssetHandler('browser-node', async () => {
       return null;
     });
 
-    // Listen for click on browser nodes to connect
-    editor.on('click', (event: any) => {
-      console.log('[Canvas] Click event:', event);
-      const shape = editor.getShapeAtPoint(editor.inputs.currentPagePoint);
-      if (shape?.type === 'browser-node' && shape?.props?.status === 'idle') {
-        console.log('[Canvas] Clicked browser node:', shape.props.nodeId);
+    // Listen for pointer down events to detect clicks on browser nodes
+    editor.on('pointer_down', (event: any) => {
+      console.log('[Canvas] Pointer down:', event);
+      // Get selected shapes or shape at pointer
+      const selectedShapes = editor.getSelectedShapes();
+      const hitShape = selectedShapes.length === 1 ? selectedShapes[0] : null;
+      
+      if (hitShape?.type === 'browser-node' && hitShape?.props?.status === 'idle') {
+        console.log('[Canvas] Clicked browser node:', hitShape.props.nodeId);
         
         // Open browser window via desktop helper
         fetch(`${DESKTOP_HELPER_URL}/create-session`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            nodeId: shape.props.nodeId,
-            ownerToken: shape.props.ownerToken,
-            title: `Browser Session - ${shape.props.nodeId.slice(0, 8)}`,
+            nodeId: hitShape.props.nodeId,
+            ownerToken: hitShape.props.ownerToken,
+            title: `Browser Session - ${hitShape.props.nodeId.slice(0, 8)}`,
           }),
         })
           .then(res => {
@@ -91,21 +97,21 @@ export default function Canvas() {
           })
           .then(() => {
             console.log('[Canvas] Browser window opened, getting viewer token...');
-            return getViewerToken(shape.props.nodeId);
+            return getViewerToken(hitShape.props.nodeId);
           })
           .then(({ viewerToken }) => {
             console.log('[Canvas] Got viewer token, updating shape...');
             editor.updateShape({
-              id: shape.id,
+              id: hitShape.id,
               type: 'browser-node',
               props: {
-                ...shape.props,
+                ...hitShape.props,
                 status: 'connecting',
                 viewerToken,
               },
             });
             window.dispatchEvent(new CustomEvent('browser-node-connect', {
-              detail: { nodeId: shape.props.nodeId, viewerToken }
+              detail: { nodeId: hitShape.props.nodeId, viewerToken }
             }));
           })
           .catch(err => {
@@ -164,7 +170,6 @@ export default function Canvas() {
         overrides={uiOverrides}
         components={components}
         onMount={(editor) => {
-          (window as any).__tldraw_editor = editor;
           handleMount(editor);
         }}
       >
