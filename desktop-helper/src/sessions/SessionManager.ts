@@ -1,7 +1,14 @@
 import { BrowserWindow, desktopCapturer } from 'electron';
-import { SessionManager } from './SessionManager';
 
-// Simplified SessionManager using HTTP frame streaming instead of WebRTC
+// Simplified Session using HTTP frame streaming instead of WebRTC
+export interface Session {
+  id: string;
+  nodeId: string;
+  window: BrowserWindow;
+  windowId: number;
+  lastFrame: Buffer | null;
+}
+
 export class SessionManager {
   private sessions: Map<string, Session> = new Map();
   private frameInterval: NodeJS.Timeout | null = null;
@@ -151,12 +158,4 @@ export class SessionManager {
   getActiveSessions(): string[] {
     return Array.from(this.sessions.keys());
   }
-}
-
-interface Session {
-  id: string;
-  nodeId: string;
-  window: BrowserWindow;
-  windowId: number;
-  lastFrame: Buffer | null;
 }
