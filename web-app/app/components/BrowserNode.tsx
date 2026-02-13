@@ -107,6 +107,7 @@ export class BrowserNodeUtil extends ShapeUtil<BrowserNodeShape> {
 function BrowserNodeComponent({ shape }: { shape: BrowserNodeShape }) {
   const { nodeId, title, status, viewerCount, w, h, ownerToken } = shape.props;
   const videoRef = useRef<HTMLVideoElement>(null);
+  const connectBtnRef = useRef<HTMLButtonElement>(null);
   const [localStatus, setLocalStatus] = useState<NodeStatus>(status);
   const [localViewerCount, setLocalViewerCount] = useState(viewerCount);
   const [isLoading, setIsLoading] = useState(false);
@@ -115,6 +116,58 @@ function BrowserNodeComponent({ shape }: { shape: BrowserNodeShape }) {
   const [heartbeatData, setHeartbeatData] = useState<any>(null);
   const [webrtcState, setWebrtcState] = useState<string>('new');
   const [captureError, setCaptureError] = useState<string | null>(null);
+
+  // Attach click handler to button via ref to bypass tldraw event interception
+  useEffect(() => {
+    const btn = connectBtnRef.current;
+    if (!btn || localStatus !== 'idle') return;
+
+    const handleClick = (e: MouseEvent) => {
+      e.stopPropagation();
+      e.preventDefault();
+      console.log('[Connect] Button ref clicked!');
+      
+      if (!nodeId || !ownerToken) {
+        alert('Missing node data. Please recreate the session.');
+        return;
+      }
+
+      setIsLoading(true);
+      fetch(`${DESKTOP_HELPER_URL}/create-session`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          nodeId,
+          ownerToken,
+          title: `Browser Session - ${nodeId.slice(0, 8)}`,
+        }),
+      })
+        .then(res => {
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          return res.json();
+        })
+        .then(() => getViewerToken(nodeId))
+        .then(({ viewerToken }) => {
+          setToken(viewerToken);
+          setLocalStatus('connecting');
+          window.dispatchEvent(new CustomEvent('browser-node-connect', {
+            detail: { nodeId, viewerToken }
+          }));
+        })
+        .catch(err => {
+          console.error('Connect failed:', err);
+          alert('Failed to connect: ' + err.message);
+          setIsLoading(false);
+        });
+    };
+
+    btn.addEventListener('click', handleClick);
+    console.log('[Connect] Button ref attached');
+    
+    return () => {
+      btn.removeEventListener('click', handleClick);
+    };
+  }, [nodeId, ownerToken, localStatus]);
 
   const handleRemoteStream = useCallback((stream: MediaStream) => {
     console.log('[WebRTC] Remote stream received:', stream.getVideoTracks()[0]?.label);
@@ -353,43 +406,7 @@ function BrowserNodeComponent({ shape }: { shape: BrowserNodeShape }) {
                   <div className="text-4xl mb-2">🌐</div>
                   <span className="text-sm mb-4">Browser session</span>
                   <button
-                    onClick={() => {
-                      console.log('CONNECT BUTTON CLICKED');
-                      console.log('nodeId:', nodeId);
-                      console.log('ownerToken:', ownerToken);
-                      if (!nodeId || !ownerToken) {
-                        alert('Missing node data. Please recreate the session.');
-                        return;
-                      }
-                      setIsLoading(true);
-                      fetch(`${DESKTOP_HELPER_URL}/create-session`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                          nodeId,
-                          ownerToken,
-                          title: `Browser Session - ${nodeId.slice(0, 8)}`,
-                        }),
-                      })
-                        .then(res => {
-                          if (!res.ok) throw new Error(`HTTP ${res.status}`);
-                          return res.json();
-                        })
-                        .then(() => getViewerToken(nodeId))
-                        .then(({ viewerToken }) => {
-                          setToken(viewerToken);
-                          setLocalStatus('connecting');
-                          // Trigger WebRTC connection via event
-                          window.dispatchEvent(new CustomEvent('browser-node-connect', {
-                            detail: { nodeId, viewerToken }
-                          }));
-                        })
-                        .catch(err => {
-                          console.error('Connect failed:', err);
-                          alert('Failed to connect: ' + err.message);
-                          setIsLoading(false);
-                        });
-                    }}
+                    ref={connectBtnRef}
                     className="px-4 py-2 bg-blue-500 text-white text-sm rounded-lg hover:bg-blue-600 transition-colors"
                   >
                     Connect
