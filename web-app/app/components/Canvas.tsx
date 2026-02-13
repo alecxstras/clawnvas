@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useState } from 'react';
+import { useCallback, useState, useRef } from 'react';
 import {
   Tldraw,
   TLUiOverrides,
@@ -62,6 +62,8 @@ const components: TLComponents = {
 export default function Canvas() {
   const [isCreating, setIsCreating] = useState(false);
 
+  const lastSelectedId = useRef<string | null>(null);
+
   const handleMount = useCallback((editor: any) => {
     // Store editor reference globally for shape access
     (window as any).__tldraw_editor = editor;
@@ -71,35 +73,28 @@ export default function Canvas() {
       return null;
     });
 
-    // Log all events to debug
-    const events = ['pointer_down', 'pointer_up', 'click', 'double_click', 'select', 'change', 'event'];
-    events.forEach(eventName => {
-      editor.on(eventName as any, (event: any) => {
-        console.log(`[Canvas] Event ${eventName}:`, event?.name || event);
-      });
-    });
-
-    // Listen for select event
-    editor.on('select', (event: any) => {
-      console.log('[Canvas] Select event:', event);
+    // Listen for change events to detect selection changes
+    editor.on('change', (event: any) => {
       const selectedShapes = editor.getSelectedShapes();
-      console.log('[Canvas] Selected shapes:', selectedShapes);
       
+      // Check if we have exactly one shape selected and it's different from last time
       if (selectedShapes.length === 1 && selectedShapes[0]?.type === 'browser-node') {
-        const hitShape = selectedShapes[0];
-        console.log('[Canvas] Selected browser node:', hitShape.props.nodeId);
+        const shape = selectedShapes[0];
         
-        if (hitShape?.props?.status === 'idle') {
-          console.log('[Canvas] Opening browser for node:', hitShape.props.nodeId);
+        // Only trigger if this is a new selection
+        if (shape.id !== lastSelectedId.current && shape?.props?.status === 'idle') {
+          lastSelectedId.current = shape.id;
+          console.log('[Canvas] Selected browser node:', shape.props.nodeId);
+          console.log('[Canvas] Opening browser for node:', shape.props.nodeId);
           
           // Open browser window via desktop helper
           fetch(`${DESKTOP_HELPER_URL}/create-session`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              nodeId: hitShape.props.nodeId,
-              ownerToken: hitShape.props.ownerToken,
-              title: `Browser Session - ${hitShape.props.nodeId.slice(0, 8)}`,
+              nodeId: shape.props.nodeId,
+              ownerToken: shape.props.ownerToken,
+              title: `Browser Session - ${shape.props.nodeId.slice(0, 8)}`,
             }),
           })
             .then(res => {
@@ -108,21 +103,21 @@ export default function Canvas() {
             })
             .then(() => {
               console.log('[Canvas] Browser window opened, getting viewer token...');
-              return getViewerToken(hitShape.props.nodeId);
+              return getViewerToken(shape.props.nodeId);
             })
             .then(({ viewerToken }) => {
               console.log('[Canvas] Got viewer token, updating shape...');
               editor.updateShape({
-                id: hitShape.id,
+                id: shape.id,
                 type: 'browser-node',
                 props: {
-                  ...hitShape.props,
+                  ...shape.props,
                   status: 'connecting',
                   viewerToken,
                 },
               });
               window.dispatchEvent(new CustomEvent('browser-node-connect', {
-                detail: { nodeId: hitShape.props.nodeId, viewerToken }
+                detail: { nodeId: shape.props.nodeId, viewerToken }
               }));
             })
             .catch(err => {
@@ -130,6 +125,9 @@ export default function Canvas() {
               alert('Failed: ' + err.message);
             });
         }
+      } else if (selectedShapes.length === 0) {
+        // Reset when nothing selected
+        lastSelectedId.current = null;
       }
     });
   }, []);
