@@ -164,13 +164,17 @@ function BrowserNodeComponent({ shape }: { shape: BrowserNodeShape }) {
     return () => window.removeEventListener('browser-node-connect', handleConnect as EventListener);
   }, [nodeId]);
 
+  // Store connect function in ref to avoid dependency loop
+  const connectRef = useRef(connect);
+  connectRef.current = connect;
+
   // Trigger signaling connection when we have a token
   useEffect(() => {
     if (token && localStatus === 'connecting') {
       console.log('[BrowserNode] Token acquired, connecting to signaling...');
-      connect();
+      connectRef.current();
     }
-  }, [token, localStatus, connect]);
+  }, [token, localStatus]);
 
   const handleSignalMessage = useCallback(async (msg: SignalMessage) => {
     if (msg.nodeId !== nodeId) return;
