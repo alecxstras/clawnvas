@@ -54,8 +54,10 @@ export class SessionManager {
   <div id="start">
     <h2>Browser Session</h2>
     <p>Enter a URL to start browsing</p>
+    <p style="font-size: 11px; color: #666; margin-top: 10px;">Try: example.com, wikipedia.org, news.ycombinator.com</p>
+    <p style="font-size: 10px; color: #999;">Note: Google, Facebook block iframe embedding</p>
   </div>
-  <iframe id="frame" sandbox="allow-scripts allow-same-origin allow-forms"></iframe>
+  <iframe id="frame"></iframe>
   <script>
     const urlInput = document.getElementById('url');
     const goBtn = document.getElementById('go');
@@ -69,10 +71,17 @@ export class SessionManager {
       start.style.display = 'none';
       frame.style.display = 'block';
       frame.src = url;
+      console.log('Navigating to:', url);
     }
     
     goBtn.onclick = navigate;
     urlInput.onkeypress = function(e) { if (e.key === 'Enter') navigate(); };
+    urlInput.focus();
+    
+    // Handle iframe load errors
+    frame.onerror = function() {
+      console.error('Failed to load iframe content');
+    };
   </script>
 </body>
 </html>`;
