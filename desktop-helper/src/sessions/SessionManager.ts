@@ -104,8 +104,18 @@ export class SessionManager {
 
     // Setup signaling handlers
     socket.on('connect', () => {
-      console.log('[Signaling] Connected to server');
+      console.log('[Signaling] ========== CONNECTED TO SERVER ==========');
+      console.log('[Signaling] Publishing as node:', nodeId);
       socket.emit('publish', { nodeId, ownerToken });
+    });
+
+    socket.on('connect_error', (err: any) => {
+      console.error('[Signaling] Connection error:', err.message);
+    });
+
+    socket.on('disconnect', (reason: string) => {
+      console.log('[Signaling] Disconnected:', reason);
+    });
 
       // Start heartbeat every 5 seconds to validate signaling loop
       const heartbeatInterval = setInterval(() => {
@@ -126,9 +136,23 @@ export class SessionManager {
     });
 
     socket.on('join', async (data: { viewerToken: string }) => {
-      console.log('[Signaling] Viewer joining:', data.viewerToken);
+      console.log('[Signaling] ========== VIEWER JOINING ==========');
+      console.log('[Signaling] Viewer token:', data.viewerToken);
+      console.log('[Signaling] Setting up WebRTC...');
       // Viewer is ready - set up WebRTC with desktop capture
       await this.setupWebRTC(session);
+    });
+
+    socket.on('offer', (data: any) => {
+      console.log('[Signaling] Received offer from viewer');
+    });
+
+    socket.on('answer', (data: any) => {
+      console.log('[Signaling] Received answer');
+    });
+
+    socket.on('ice', (data: any) => {
+      console.log('[Signaling] Received ICE candidate');
     });
 
     socket.on('answer', async (data: { sdp: RTCSessionDescriptionInit }) => {
@@ -161,9 +185,10 @@ export class SessionManager {
 
   private async setupWebRTC(session: Session): Promise<void> {
     try {
-      console.log('[WebRTC] Setting up with desktop capture...');
+      console.log('[WebRTC] ========== SETTING UP WEBRTC ==========');
 
       // Create peer connection first
+      console.log('[WebRTC] Creating RTCPeerConnection...');
       const pc = new RTCPeerConnection({
         iceServers: [
           { urls: 'stun:stun.l.google.com:19302' },
@@ -174,16 +199,22 @@ export class SessionManager {
 
       // Log connection state changes
       pc.oniceconnectionstatechange = () => {
-        console.log('[WebRTC] ICE state:', pc.iceConnectionState);
+        console.log('[WebRTC] ICE state changed:', pc.iceConnectionState);
       };
 
       pc.onconnectionstatechange = () => {
-        console.log('[WebRTC] Connection state:', pc.connectionState);
+        console.log('[WebRTC] Connection state changed:', pc.connectionState);
+      };
+
+      pc.onicegatheringstatechange = () => {
+        console.log('[WebRTC] ICE gathering state:', pc.iceGatheringState);
       };
 
       // Handle ICE candidates
       pc.onicecandidate = (event) => {
+        console.log('[WebRTC] onicecandidate event:', event.candidate ? 'has candidate' : 'null');
         if (event.candidate) {
+          console.log('[WebRTC] Sending ICE candidate to viewer');
           session.socket.emit('ice', {
             nodeId: session.nodeId,
             candidate: event.candidate.toJSON(),
@@ -192,28 +223,36 @@ export class SessionManager {
       };
 
       // Get desktop capture stream
+      console.log('[WebRTC] Getting desktop capture stream...');
       const stream = await this.startCapture(session);
       session.stream = stream;
+      console.log('[WebRTC] Got stream with', stream.getTracks().length, 'tracks');
 
       // Add tracks to peer connection
-      session.stream.getTracks().forEach((track) => {
-        pc.addTrack(track, session.stream!);
-        console.log('[WebRTC] Added track:', track.kind, track.label);
+      console.log('[WebRTC] Adding tracks to peer connection...');
+      session.stream.getTracks().forEach((track, i) => {
+        console.log(`[WebRTC] Adding track ${i}:`, track.kind, track.label, 'enabled:', track.enabled);
+        const sender = pc.addTrack(track, session.stream!);
+        console.log('[WebRTC] Track added, sender created:', sender);
       });
 
       // Create and send offer
       console.log('[WebRTC] Creating offer...');
       const offer = await pc.createOffer();
+      console.log('[WebRTC] Offer created, setting local description...');
       await pc.setLocalDescription(offer);
+      console.log('[WebRTC] Local description set');
 
+      console.log('[WebRTC] Sending offer to signaling server...');
       session.socket.emit('offer', {
         nodeId: session.nodeId,
         sdp: offer,
       });
-      console.log('[WebRTC] Offer sent');
+      console.log('[WebRTC] ========== OFFER SENT ==========');
 
     } catch (error) {
-      console.error('[WebRTC] Setup failed:', error);
+      console.error('[WebRTC] ========== SETUP FAILED ==========');
+      console.error('[WebRTC] Error:', error);
       // Notify web app of error
       session.socket.emit('capture-error', {
         nodeId: session.nodeId,
