@@ -32,7 +32,49 @@ export class SessionManager {
     console.log(`[Session] Created window ${windowId} for node ${nodeId}`);
 
     // Load a simple browser interface with address bar
-    await window.loadURL('data:text/html,<!DOCTYPE html><html><head><style>body{margin:0;font-family:system-ui}#bar{display:flex;padding:8px;background:#f0f0f0;border-bottom:1px solid #ccc}#url{flex:1;padding:6px;border:1px solid #ccc;border-radius:4px}#go{padding:6px 16px;margin-left:8px;background:#0066cc;color:white;border:none;border-radius:4px;cursor:pointer}#go:hover{background:#0052a3}iframe{width:100%;height:calc(100vh - 50px);border:none}</style></head><body><div id="bar"><input type="text" id="url" placeholder="Enter URL..." value="https://www.google.com"><button id="go">Go</button></div><iframe id="frame"></iframe><script>const url=document.getElementById("url");const go=document.getElementById("go");const frame=document.getElementById("frame");function nav(){let u=url.value;if(!u.match(/^https?:\/\//))u="https://"+u;frame.src=u;}go.onclick=nav;url.onkeypress=(e)=>{if(e.key==="Enter")nav();};frame.onload=()=>{try{url.value=frame.contentWindow.location.href}catch(e){}};</script></body></html>');
+    const browserHTML = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+    #bar { display: flex; padding: 10px; background: #f1f3f4; border-bottom: 1px solid #dadce0; align-items: center; }
+    #url { flex: 1; padding: 8px 12px; border: 1px solid #dadce0; border-radius: 20px; font-size: 14px; outline: none; }
+    #url:focus { border-color: #1a73e8; }
+    #go { margin-left: 10px; padding: 8px 20px; background: #1a73e8; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; }
+    #go:hover { background: #1557b0; }
+    #frame { width: 100%; height: calc(100vh - 60px); border: none; }
+  </style>
+</head>
+<body>
+  <div id="bar">
+    <input type="text" id="url" placeholder="Enter URL..." value="https://www.google.com">
+    <button id="go">Go</button>
+  </div>
+  <iframe id="frame" sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-top-navigation"></iframe>
+  <script>
+    const urlInput = document.getElementById('url');
+    const goBtn = document.getElementById('go');
+    const frame = document.getElementById('frame');
+    
+    function navigate() {
+      let url = urlInput.value.trim();
+      if (!url) return;
+      if (!url.match(/^https?:\\/\\//)) url = 'https://' + url;
+      frame.src = url;
+    }
+    
+    goBtn.onclick = navigate;
+    urlInput.onkeypress = (e) => { if (e.key === 'Enter') navigate(); };
+    
+    // Load initial page
+    navigate();
+  </script>
+</body>
+</html>`;
+    
+    await window.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(browserHTML)}`);
 
     // Ensure window is visible and focused
     window.show();

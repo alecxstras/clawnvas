@@ -74,7 +74,7 @@ export default function Canvas() {
       if (shape?.type === 'browser-node' && shape?.props?.status === 'idle') {
         console.log('[Canvas] Double-clicked browser node:', shape.props.nodeId);
         
-        // Open browser window via desktop helper
+        // Step 1: Open browser window via desktop helper
         fetch(`${DESKTOP_HELPER_URL}/create-session`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -89,20 +89,30 @@ export default function Canvas() {
             return res.json();
           })
           .then(() => {
-            console.log('[Canvas] Browser window opened');
-            // Update shape status
+            console.log('[Canvas] Browser window opened, getting viewer token...');
+            // Step 2: Get viewer token and trigger WebRTC
+            return getViewerToken(shape.props.nodeId);
+          })
+          .then(({ viewerToken }) => {
+            console.log('[Canvas] Got viewer token, updating shape...');
+            // Step 3: Update shape with token and trigger connection via custom event
             editor.updateShape({
               id: shape.id,
               type: 'browser-node',
               props: {
                 ...shape.props,
                 status: 'connecting',
+                viewerToken,
               },
             });
+            // Dispatch event to trigger WebRTC in the component
+            window.dispatchEvent(new CustomEvent('browser-node-connect', {
+              detail: { nodeId: shape.props.nodeId, viewerToken }
+            }));
           })
           .catch(err => {
-            console.error('[Canvas] Failed to open browser:', err);
-            alert('Failed to open browser. Is Desktop Helper running?');
+            console.error('[Canvas] Failed:', err);
+            alert('Failed: ' + err.message);
           });
       }
     });

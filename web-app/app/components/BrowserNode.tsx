@@ -149,46 +149,28 @@ function BrowserNodeComponent({ shape }: { shape: BrowserNodeShape }) {
     }
   }, [connectionState]);
 
-  // Listen for shape click events
+  // Listen for connect event from Canvas
   useEffect(() => {
-    const handleClick = (e: CustomEvent) => {
-      if (e.detail.nodeId === nodeId && localStatus === 'idle') {
-        console.log('[BrowserNode] Shape clicked, auto-connecting...');
-        // Auto-trigger connect - use ref to avoid dependency issues
-        const doConnect = () => {
-          setIsLoading(true);
-          fetch(`${DESKTOP_HELPER_URL}/create-session`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              nodeId,
-              ownerToken,
-              title: `Browser Session - ${nodeId.slice(0, 8)}`,
-            }),
-          })
-            .then(res => {
-              if (!res.ok) throw new Error(`HTTP ${res.status}`);
-              return res.json();
-            })
-            .then(() => getViewerToken(nodeId))
-            .then(({ viewerToken }) => {
-              setToken(viewerToken);
-              setLocalStatus('connecting');
-            })
-            .catch(err => {
-              console.error('Connect failed:', err);
-              alert('Failed to connect: ' + err.message);
-              setIsLoading(false);
-            });
-        };
-        doConnect();
+    const handleConnect = (e: CustomEvent) => {
+      if (e.detail.nodeId === nodeId) {
+        console.log('[BrowserNode] Received connect event, starting WebRTC...');
+        setToken(e.detail.viewerToken);
+        setLocalStatus('connecting');
+        // The useEffect below will trigger when token changes
       }
     };
     
-    window.addEventListener('browser-node-click', handleClick as EventListener);
-    return () => window.removeEventListener('browser-node-click', handleClick as EventListener);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [nodeId, ownerToken, localStatus]);
+    window.addEventListener('browser-node-connect', handleConnect as EventListener);
+    return () => window.removeEventListener('browser-node-connect', handleConnect as EventListener);
+  }, [nodeId]);
+
+  // Trigger signaling connection when we have a token
+  useEffect(() => {
+    if (token && localStatus === 'connecting') {
+      console.log('[BrowserNode] Token acquired, connecting to signaling...');
+      connect();
+    }
+  }, [token, localStatus, connect]);
 
   const handleSignalMessage = useCallback(async (msg: SignalMessage) => {
     if (msg.nodeId !== nodeId) return;
