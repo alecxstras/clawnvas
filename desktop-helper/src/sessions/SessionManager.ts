@@ -32,36 +32,30 @@ export class SessionManager {
     console.log(`[Session] Created window ${windowId} for node ${nodeId}`);
 
     // Load a simple browser interface with address bar
-    // Note: Many sites block iframe embedding. Start with about:blank and let user navigate.
     const browserHTML = `<!DOCTYPE html>
 <html>
 <head>
   <meta charset="UTF-8">
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
-    #bar { display: flex; padding: 10px; background: #f1f3f4; border-bottom: 1px solid #dadce0; align-items: center; }
-    #url { flex: 1; padding: 8px 12px; border: 1px solid #dadce0; border-radius: 20px; font-size: 14px; outline: none; }
-    #url:focus { border-color: #1a73e8; }
-    #go { margin-left: 10px; padding: 8px 20px; background: #1a73e8; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; }
-    #go:hover { background: #1557b0; }
-    #frame { width: 100%; height: calc(100vh - 60px); border: none; }
-    #start { display: flex; flex-direction: column; align-items: center; justify-content: center; height: calc(100vh - 60px); color: #5f6368; }
-    #start h2 { margin-bottom: 20px; font-weight: 400; }
-    #start p { margin: 5px 0; }
+    body { font-family: system-ui, sans-serif; }
+    #bar { display: flex; padding: 10px; background: #f1f3f4; border-bottom: 1px solid #dadce0; }
+    #url { flex: 1; padding: 8px 12px; border: 1px solid #dadce0; border-radius: 20px; }
+    #go { margin-left: 10px; padding: 8px 20px; background: #1a73e8; color: white; border: none; border-radius: 4px; cursor: pointer; }
+    #start { display: flex; flex-direction: column; align-items: center; justify-content: center; height: calc(100vh - 60px); }
+    #frame { width: 100%; height: calc(100vh - 60px); border: none; display: none; }
   </style>
 </head>
 <body>
   <div id="bar">
-    <input type="text" id="url" placeholder="Enter URL (e.g., example.com)..." value="">
+    <input type="text" id="url" placeholder="Enter URL...">
     <button id="go">Go</button>
   </div>
   <div id="start">
-    <h2>🌐 Browser Session</h2>
-    <p>Enter a URL above to start browsing</p>
-    <p style="font-size: 12px; margin-top: 20px; color: #999;">Note: Some sites may not load in embedded mode</p>
+    <h2>Browser Session</h2>
+    <p>Enter a URL to start browsing</p>
   </div>
-  <iframe id="frame" style="display:none;" sandbox="allow-scripts allow-same-origin allow-forms allow-popups"></iframe>
+  <iframe id="frame" sandbox="allow-scripts allow-same-origin allow-forms"></iframe>
   <script>
     const urlInput = document.getElementById('url');
     const goBtn = document.getElementById('go');
@@ -71,22 +65,19 @@ export class SessionManager {
     function navigate() {
       let url = urlInput.value.trim();
       if (!url) return;
-      if (!url.match(/^https?:\\/\\//)) url = 'https://' + url;
-      
-      // Hide start screen, show iframe
+      if (!url.match(/^https?:\/\//)) url = 'https://' + url;
       start.style.display = 'none';
       frame.style.display = 'block';
       frame.src = url;
     }
     
     goBtn.onclick = navigate;
-    urlInput.onkeypress = (e) => { if (e.key === 'Enter') navigate(); };
-    urlInput.focus();
+    urlInput.onkeypress = function(e) { if (e.key === 'Enter') navigate(); };
   </script>
 </body>
 </html>`;
     
-    await window.loadURL(\`data:text/html;charset=utf-8,\${encodeURIComponent(browserHTML)}\`);
+    await window.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(browserHTML));
 
     // Ensure window is visible and focused
     window.show();
