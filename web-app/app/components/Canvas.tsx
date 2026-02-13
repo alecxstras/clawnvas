@@ -52,11 +52,67 @@ const components: TLComponents = {
   KeyboardShortcutsDialog: DefaultKeyboardShortcutsDialog,
   KeyboardShortcutsDialogContent: DefaultKeyboardShortcutsDialogContent,
   StylePanel: DefaultStylePanel,
-  ContextMenu: (props) => (
-    <DefaultContextMenu {...props}>
-      <DefaultContextMenuContent />
-    </DefaultContextMenu>
-  ),
+  ContextMenu: (props) => {
+    const editor = (window as any).__tldraw_editor;
+    const selectedShapes = editor?.getSelectedShapes() || [];
+    const isBrowserNode = selectedShapes.length === 1 && selectedShapes[0]?.type === 'browser-node';
+    const selectedShape = isBrowserNode ? selectedShapes[0] : null;
+    
+    return (
+      <DefaultContextMenu {...props}>
+        <DefaultContextMenuContent />
+        {selectedShape && selectedShape.props.status === 'idle' && (
+          <div 
+            className="tlui-menu__item" 
+            onClick={() => {
+              console.log('[ContextMenu] Opening browser for:', selectedShape.props.nodeId);
+              fetch(`${DESKTOP_HELPER_URL}/create-session`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  nodeId: selectedShape.props.nodeId,
+                  ownerToken: selectedShape.props.ownerToken,
+                  title: `Browser Session - ${selectedShape.props.nodeId.slice(0, 8)}`,
+                }),
+              })
+                .then(res => {
+                  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                  return res.json();
+                })
+                .then(() => getViewerToken(selectedShape.props.nodeId))
+                .then(({ viewerToken }) => {
+                  editor.updateShape({
+                    id: selectedShape.id,
+                    type: 'browser-node',
+                    props: {
+                      ...selectedShape.props,
+                      status: 'connecting',
+                    },
+                  });
+                  window.dispatchEvent(new CustomEvent('browser-node-connect', {
+                    detail: { nodeId: selectedShape.props.nodeId, viewerToken }
+                  }));
+                })
+                .catch(err => {
+                  console.error('[ContextMenu] Failed:', err);
+                  alert('Failed: ' + err.message);
+                });
+            }}
+            style={{ 
+              padding: '8px 12px', 
+              cursor: 'pointer',
+              borderTop: '1px solid #e5e7eb',
+              fontSize: '14px'
+            }}
+            onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#f3f4f6')}
+            onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+          >
+            🌐 Open Browser
+          </div>
+        )}
+      </DefaultContextMenu>
+    );
+  },
 };
 
 export default function Canvas() {
