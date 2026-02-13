@@ -14,9 +14,9 @@ let sessionManager: SessionManager;
 // Express HTTP server for web app to trigger window creation
 const httpApp = express();
 
-// CORS - allow web app to call desktop helper
+// CORS - allow all origins for testing
 httpApp.use(cors({
-  origin: ['http://localhost:3000', 'http://127.0.0.1:3000'],
+  origin: true,
   methods: ['GET', 'POST', 'OPTIONS'],
   allowedHeaders: ['Content-Type'],
   credentials: false
@@ -66,6 +66,12 @@ app.on('window-all-closed', () => {
 });
 
 function setupHttpServer() {
+  // Simple test endpoint
+  httpApp.get('/test', (req, res) => {
+    console.log('[HTTP] Test endpoint hit');
+    res.json({ status: 'ok', message: 'Desktop Helper is running' });
+  });
+
   // POST /create-session - Web app calls this to open a browser window
   httpApp.post('/create-session', async (req, res) => {
     const { nodeId, ownerToken, title } = req.body;

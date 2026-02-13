@@ -158,7 +158,19 @@ function BrowserNodeComponent({ shape }: { shape: BrowserNodeShape }) {
     setError(null);
 
     try {
+      // First test if Desktop Helper is reachable
+      console.log('[Connect] Testing Desktop Helper...');
+      const testRes = await fetch(`${DESKTOP_HELPER_URL}/test`, { 
+        method: 'GET',
+        mode: 'cors'
+      });
+      if (!testRes.ok) {
+        throw new Error(`Desktop Helper not responding: ${testRes.status}`);
+      }
+      console.log('[Connect] Desktop Helper is running');
+
       // Tell Desktop Helper to open browser window
+      console.log('[Connect] Creating browser window...');
       const response = await fetch(`${DESKTOP_HELPER_URL}/create-session`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -174,12 +186,13 @@ function BrowserNodeComponent({ shape }: { shape: BrowserNodeShape }) {
         throw new Error(`HTTP ${response.status}: ${errText}`);
       }
 
+      console.log('[Connect] Window created, starting stream...');
       // Success! Window is open, now start showing frames
       setLocalStatus('live');
       
     } catch (err) {
       console.error('Connect failed:', err);
-      setError((err as Error).message);
+      setError(`Cannot connect to Desktop Helper. Is it running on port 3002? Error: ${(err as Error).message}`);
       setLocalStatus('idle');
     } finally {
       setIsLoading(false);
