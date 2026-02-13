@@ -1,4 +1,7 @@
 import { BrowserWindow } from 'electron';
+import * as path from 'path';
+import * as fs from 'fs';
+import * as os from 'os';
 
 export interface Session {
   id: string;
@@ -8,16 +11,62 @@ export interface Session {
   lastFrame: Buffer | null;
 }
 
-// Simple browser UI as data URL
-const BROWSER_UI = `
-data:text/html,<!DOCTYPE html>
+export class SessionManager {
+  private sessions: Map<string, Session> = new Map();
+
+  async createSession(nodeId: string, ownerToken: string, title: string): Promise<Session> {
+    console.log(`[Session] Creating window for node ${nodeId}`);
+
+    // Create browser window with navigation
+    const window = new BrowserWindow({
+      width: 1280,
+      height: 720,
+      title: title || `Browser Session - ${nodeId.slice(0, 8)}`,
+      webPreferences: {
+        nodeIntegration: false,
+        contextIsolation: true,
+        webSecurity: true,
+      },
+    });
+
+    const windowId = window.id;
+
+    // Set up window with navigation
+    this.setupBrowserWindow(window, nodeId);
+
+    // Store session
+    const session: Session = {
+      id: nodeId,
+      nodeId,
+      window,
+      windowId,
+      lastFrame: null,
+    };
+
+    this.sessions.set(nodeId, session);
+    console.log(`[Session] Session ${nodeId} ready`);
+
+    // Handle window close
+    window.on('closed', () => {
+      this.sessions.delete(nodeId);
+      console.log(`[Session] ${nodeId} stopped`);
+    });
+
+    return session;
+  }
+
+  private setupBrowserWindow(window: BrowserWindow, nodeId: string) {
+    // Load a simple HTML page with iframe-based browser
+    const htmlContent = `
+<!DOCTYPE html>
 <html>
 <head>
   <meta charset="UTF-8">
+  <title>Browser Session</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { 
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; 
+      font-family: -apple-system, BlinkMacSystemFont, sans-serif; 
       background: #1a1a1a;
       height: 100vh;
       display: flex;
@@ -53,100 +102,66 @@ data:text/html,<!DOCTYPE html>
       font-weight: 500;
     }
     button:hover { background: #2563eb; }
-    #content { 
+    #frame { 
       flex: 1; 
       width: 100%; 
       border: none;
+      background: white;
     }
   </style>
 </head>
 <body>
   <div class="toolbar">
-    <input type="text" id="url" placeholder="Enter URL (e.g., google.com)" value="https://example.com" />
-    <button onclick="go()">Go</button>
+    <input type="text" id="url" placeholder="Enter URL" value="https://example.com" />
+    <button onclick="navigate()">Go</button>
   </div>
-  <webview id="content" src="https://example.com" autosize="on" style="width:100%;height:100%;"></webview>
+  <iframe id="frame" src="https://example.com" sandbox="allow-scripts allow-same-origin allow-popups allow-forms"></iframe>
   <script>
-    function go() {
-      var url = document.getElementById('url').value.trim();
+    const urlInput = document.getElementById('url');
+    const frame = document.getElementById('frame');
+    
+    function navigate() {
+      let url = urlInput.value.trim();
       if (!url) return;
       if (!url.startsWith('http')) url = 'https://' + url;
-      document.getElementById('content').src = url;
+      frame.src = url;
     }
-    document.getElementById('url').addEventListener('keypress', function(e) {
-      if (e.key === 'Enter') go();
+    
+    urlInput.addEventListener('keypress', function(e) {
+      if (e.key === 'Enter') navigate();
+    });
+    
+    // Update URL bar when iframe navigates
+    frame.addEventListener('load', function() {
+      try {
+        urlInput.value = frame.contentWindow.location.href;
+      } catch(e) {
+        // Cross-origin, can't read URL
+      }
     });
   </script>
 </body>
 </html>
-`;
+    `;
 
-export class SessionManager {
-  private sessions: Map<string, Session> = new Map();
-
-  async createSession(nodeId: string, ownerToken: string, title: string): Promise<Session> {
-    console.log(`[Session] Creating window for node ${nodeId}`);
-
-    // Create visible browser window
-    const window = new BrowserWindow({
-      width: 1280,
-      height: 720,
-      title: title || `Browser Session - ${nodeId.slice(0, 8)}`,
-      webPreferences: {
-        nodeIntegration: false,
-        contextIsolation: true,
-        webviewTag: true,
-        webSecurity: false,
-        allowRunningInsecureContent: true,
-      },
-    });
-
-    const windowId = window.id;
-
-    // Load the browser UI
-    try {
-      await window.loadURL(BROWSER_UI);
-      console.log(`[Session] Window ${windowId} loaded`);
-    } catch (err) {
-      console.error('[Session] Failed to load UI:', err);
-      throw err;
-    }
-
+    // Write to temp file and load
+    const tempPath = path.join(os.tmpdir(), `browser-session-${nodeId}.html`);
+    fs.writeFileSync(tempPath, htmlContent);
+    
+    window.loadFile(tempPath);
     window.show();
     window.focus();
-
-    // Store session
-    const session: Session = {
-      id: nodeId,
-      nodeId,
-      window,
-      windowId,
-      lastFrame: null,
-    };
-
-    this.sessions.set(nodeId, session);
-    console.log(`[Session] Session ${nodeId} ready`);
-
-    // Handle window close
-    window.on('closed', () => {
-      this.sessions.delete(nodeId);
-      console.log(`[Session] ${nodeId} stopped`);
-    });
-
-    return session;
   }
 
   async captureFrame(nodeId: string): Promise<Buffer | null> {
     const session = this.sessions.get(nodeId);
     if (!session || !session.window || session.window.isDestroyed()) {
-      console.log('[Capture] Session not found or window destroyed');
       return null;
     }
 
     try {
       const image = await session.window.webContents.capturePage();
       const buffer = image.toPNG();
-      console.log(`[Capture] Frame captured: ${buffer.length} bytes`);
       return buffer;
     } catch (err) {
       console.error('[Capture] Failed:', err);
