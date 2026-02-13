@@ -68,13 +68,14 @@ export default function Canvas() {
       return null;
     });
 
-    // Listen for double-click on browser nodes to connect
-    editor.on('double_click', (event: any) => {
-      const { shape } = event;
+    // Listen for click on browser nodes to connect
+    editor.on('click', (event: any) => {
+      console.log('[Canvas] Click event:', event);
+      const shape = editor.getShapeAtPoint(editor.inputs.currentPagePoint);
       if (shape?.type === 'browser-node' && shape?.props?.status === 'idle') {
-        console.log('[Canvas] Double-clicked browser node:', shape.props.nodeId);
+        console.log('[Canvas] Clicked browser node:', shape.props.nodeId);
         
-        // Step 1: Open browser window via desktop helper
+        // Open browser window via desktop helper
         fetch(`${DESKTOP_HELPER_URL}/create-session`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -90,12 +91,10 @@ export default function Canvas() {
           })
           .then(() => {
             console.log('[Canvas] Browser window opened, getting viewer token...');
-            // Step 2: Get viewer token and trigger WebRTC
             return getViewerToken(shape.props.nodeId);
           })
           .then(({ viewerToken }) => {
             console.log('[Canvas] Got viewer token, updating shape...');
-            // Step 3: Update shape with token and trigger connection via custom event
             editor.updateShape({
               id: shape.id,
               type: 'browser-node',
@@ -105,7 +104,6 @@ export default function Canvas() {
                 viewerToken,
               },
             });
-            // Dispatch event to trigger WebRTC in the component
             window.dispatchEvent(new CustomEvent('browser-node-connect', {
               detail: { nodeId: shape.props.nodeId, viewerToken }
             }));
