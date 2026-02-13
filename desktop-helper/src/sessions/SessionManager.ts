@@ -107,15 +107,6 @@ export class SessionManager {
       console.log('[Signaling] ========== CONNECTED TO SERVER ==========');
       console.log('[Signaling] Publishing as node:', nodeId);
       socket.emit('publish', { nodeId, ownerToken });
-    });
-
-    socket.on('connect_error', (err: any) => {
-      console.error('[Signaling] Connection error:', err.message);
-    });
-
-    socket.on('disconnect', (reason: string) => {
-      console.log('[Signaling] Disconnected:', reason);
-    });
 
       // Start heartbeat every 5 seconds to validate signaling loop
       const heartbeatInterval = setInterval(() => {
@@ -133,6 +124,14 @@ export class SessionManager {
 
       // Store interval for cleanup
       (session as any).heartbeatInterval = heartbeatInterval;
+    });
+
+    socket.on('connect_error', (err: any) => {
+      console.error('[Signaling] Connection error:', err.message);
+    });
+
+    socket.on('disconnect', (reason: string) => {
+      console.log('[Signaling] Disconnected:', reason);
     });
 
     socket.on('join', async (data: { viewerToken: string }) => {
