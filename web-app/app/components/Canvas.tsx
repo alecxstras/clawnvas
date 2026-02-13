@@ -83,19 +83,10 @@ const components: TLComponents = {
                 }
                 
                 await response.json();
-                const { viewerToken } = await getViewerToken(selectedShape.props.nodeId);
                 
-                editor.updateShape({
-                  id: selectedShape.id,
-                  type: 'browser-node',
-                  props: {
-                    ...selectedShape.props,
-                    status: 'connecting',
-                  },
-                });
-                
+                // Just trigger the connect event - BrowserNode handles the stream
                 window.dispatchEvent(new CustomEvent('browser-node-connect', {
-                  detail: { nodeId: selectedShape.props.nodeId, viewerToken }
+                  detail: { nodeId: selectedShape.props.nodeId }
                 }));
               } catch (err) {
                 console.error('[ContextMenu] Failed:', err);
@@ -137,49 +128,19 @@ export default function Canvas() {
       return null;
     });
 
-    // Listen for change events to detect selection changes
+    // Track selected browser nodes for context menu
     editor.on('change', (event: any) => {
       const selectedShapes = editor.getSelectedShapes();
-      
-      // Check if we have exactly one shape selected and it's different from last time
       if (selectedShapes.length === 1 && selectedShapes[0]?.type === 'browser-node') {
         const shape = selectedShapes[0];
-        
-        // Only trigger if this is a new selection
-        if (shape.id !== lastSelectedId.current && shape?.props?.status === 'idle') {
+        if (shape.id !== lastSelectedId.current) {
           lastSelectedId.current = shape.id;
+          selectedBrowserNode.current = shape;
           console.log('[Canvas] Selected browser node:', shape.props.nodeId);
-          console.log('[Canvas] Opening browser for node:', shape.props.nodeId);
-          
-          // Open browser window via desktop helper (simplified - no tokens needed)
-          fetch(`${DESKTOP_HELPER_URL}/create-session`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              nodeId: shape.props.nodeId,
-              ownerToken: shape.props.ownerToken,
-              title: `Browser Session - ${shape.props.nodeId.slice(0, 8)}`,
-            }),
-          })
-            .then(res => {
-              if (!res.ok) throw new Error(`HTTP ${res.status}`);
-              return res.json();
-            })
-            .then(() => {
-              console.log('[Canvas] Browser window opened, connecting...');
-              // Just dispatch connect event - BrowserNode will handle the stream
-              window.dispatchEvent(new CustomEvent('browser-node-connect', {
-                detail: { nodeId: shape.props.nodeId }
-              }));
-            })
-            .catch(err => {
-              console.error('[Canvas] Failed:', err);
-              alert('Failed: ' + err.message);
-            });
         }
       } else if (selectedShapes.length === 0) {
-        // Reset when nothing selected
         lastSelectedId.current = null;
+        selectedBrowserNode.current = null;
       }
     });
   }, []);

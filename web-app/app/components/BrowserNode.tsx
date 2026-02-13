@@ -75,14 +75,6 @@ export class BrowserNodeUtil extends ShapeUtil<BrowserNodeShape> {
     return resizeBox(shape, info);
   };
 
-  override onClick(shape: BrowserNodeShape) {
-    if (typeof window !== 'undefined') {
-      window.dispatchEvent(new CustomEvent('browser-node-click', { 
-        detail: { nodeId: shape.props.nodeId, ownerToken: shape.props.ownerToken }
-      }));
-    }
-  }
-
   component(shape: BrowserNodeShape) {
     return <BrowserNodeComponent shape={shape} />;
   }
@@ -142,11 +134,11 @@ function BrowserNodeComponent({ shape }: { shape: BrowserNodeShape }) {
   // Start polling for frames when live
   useEffect(() => {
     if (localStatus === 'live') {
-      // Poll for new frame every 100ms
+      // Poll for new frame every 50ms for smoother streaming (~20fps)
       frameIntervalRef.current = setInterval(() => {
         // Add timestamp to prevent caching
         setFrameUrl(`${DESKTOP_HELPER_URL}/frame/${nodeId}?t=${Date.now()}`);
-      }, 100);
+      }, 50);
     } else {
       if (frameIntervalRef.current) {
         clearInterval(frameIntervalRef.current);
