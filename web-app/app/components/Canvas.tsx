@@ -71,53 +71,65 @@ export default function Canvas() {
       return null;
     });
 
-    // Listen for pointer down events to detect clicks on browser nodes
-    editor.on('pointer_down', (event: any) => {
-      console.log('[Canvas] Pointer down:', event);
-      // Get selected shapes or shape at pointer
+    // Log all events to debug
+    const events = ['pointer_down', 'pointer_up', 'click', 'double_click', 'select', 'change', 'event'];
+    events.forEach(eventName => {
+      editor.on(eventName as any, (event: any) => {
+        console.log(`[Canvas] Event ${eventName}:`, event?.name || event);
+      });
+    });
+
+    // Listen for select event
+    editor.on('select', (event: any) => {
+      console.log('[Canvas] Select event:', event);
       const selectedShapes = editor.getSelectedShapes();
-      const hitShape = selectedShapes.length === 1 ? selectedShapes[0] : null;
+      console.log('[Canvas] Selected shapes:', selectedShapes);
       
-      if (hitShape?.type === 'browser-node' && hitShape?.props?.status === 'idle') {
-        console.log('[Canvas] Clicked browser node:', hitShape.props.nodeId);
+      if (selectedShapes.length === 1 && selectedShapes[0]?.type === 'browser-node') {
+        const hitShape = selectedShapes[0];
+        console.log('[Canvas] Selected browser node:', hitShape.props.nodeId);
         
-        // Open browser window via desktop helper
-        fetch(`${DESKTOP_HELPER_URL}/create-session`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            nodeId: hitShape.props.nodeId,
-            ownerToken: hitShape.props.ownerToken,
-            title: `Browser Session - ${hitShape.props.nodeId.slice(0, 8)}`,
-          }),
-        })
-          .then(res => {
-            if (!res.ok) throw new Error(`HTTP ${res.status}`);
-            return res.json();
+        if (hitShape?.props?.status === 'idle') {
+          console.log('[Canvas] Opening browser for node:', hitShape.props.nodeId);
+          
+          // Open browser window via desktop helper
+          fetch(`${DESKTOP_HELPER_URL}/create-session`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              nodeId: hitShape.props.nodeId,
+              ownerToken: hitShape.props.ownerToken,
+              title: `Browser Session - ${hitShape.props.nodeId.slice(0, 8)}`,
+            }),
           })
-          .then(() => {
-            console.log('[Canvas] Browser window opened, getting viewer token...');
-            return getViewerToken(hitShape.props.nodeId);
-          })
-          .then(({ viewerToken }) => {
-            console.log('[Canvas] Got viewer token, updating shape...');
-            editor.updateShape({
-              id: hitShape.id,
-              type: 'browser-node',
-              props: {
-                ...hitShape.props,
-                status: 'connecting',
-                viewerToken,
-              },
+            .then(res => {
+              if (!res.ok) throw new Error(`HTTP ${res.status}`);
+              return res.json();
+            })
+            .then(() => {
+              console.log('[Canvas] Browser window opened, getting viewer token...');
+              return getViewerToken(hitShape.props.nodeId);
+            })
+            .then(({ viewerToken }) => {
+              console.log('[Canvas] Got viewer token, updating shape...');
+              editor.updateShape({
+                id: hitShape.id,
+                type: 'browser-node',
+                props: {
+                  ...hitShape.props,
+                  status: 'connecting',
+                  viewerToken,
+                },
+              });
+              window.dispatchEvent(new CustomEvent('browser-node-connect', {
+                detail: { nodeId: hitShape.props.nodeId, viewerToken }
+              }));
+            })
+            .catch(err => {
+              console.error('[Canvas] Failed:', err);
+              alert('Failed: ' + err.message);
             });
-            window.dispatchEvent(new CustomEvent('browser-node-connect', {
-              detail: { nodeId: hitShape.props.nodeId, viewerToken }
-            }));
-          })
-          .catch(err => {
-            console.error('[Canvas] Failed:', err);
-            alert('Failed: ' + err.message);
-          });
+        }
       }
     });
   }, []);
