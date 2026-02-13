@@ -32,6 +32,7 @@ export class SessionManager {
     console.log(`[Session] Created window ${windowId} for node ${nodeId}`);
 
     // Load a simple browser interface with address bar
+    // Note: Many sites block iframe embedding. Start with about:blank and let user navigate.
     const browserHTML = `<!DOCTYPE html>
 <html>
 <head>
@@ -45,36 +46,47 @@ export class SessionManager {
     #go { margin-left: 10px; padding: 8px 20px; background: #1a73e8; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; }
     #go:hover { background: #1557b0; }
     #frame { width: 100%; height: calc(100vh - 60px); border: none; }
+    #start { display: flex; flex-direction: column; align-items: center; justify-content: center; height: calc(100vh - 60px); color: #5f6368; }
+    #start h2 { margin-bottom: 20px; font-weight: 400; }
+    #start p { margin: 5px 0; }
   </style>
 </head>
 <body>
   <div id="bar">
-    <input type="text" id="url" placeholder="Enter URL..." value="https://www.google.com">
+    <input type="text" id="url" placeholder="Enter URL (e.g., example.com)..." value="">
     <button id="go">Go</button>
   </div>
-  <iframe id="frame" sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-top-navigation"></iframe>
+  <div id="start">
+    <h2>🌐 Browser Session</h2>
+    <p>Enter a URL above to start browsing</p>
+    <p style="font-size: 12px; margin-top: 20px; color: #999;">Note: Some sites may not load in embedded mode</p>
+  </div>
+  <iframe id="frame" style="display:none;" sandbox="allow-scripts allow-same-origin allow-forms allow-popups"></iframe>
   <script>
     const urlInput = document.getElementById('url');
     const goBtn = document.getElementById('go');
     const frame = document.getElementById('frame');
+    const start = document.getElementById('start');
     
     function navigate() {
       let url = urlInput.value.trim();
       if (!url) return;
       if (!url.match(/^https?:\\/\\//)) url = 'https://' + url;
+      
+      // Hide start screen, show iframe
+      start.style.display = 'none';
+      frame.style.display = 'block';
       frame.src = url;
     }
     
     goBtn.onclick = navigate;
     urlInput.onkeypress = (e) => { if (e.key === 'Enter') navigate(); };
-    
-    // Load initial page
-    navigate();
+    urlInput.focus();
   </script>
 </body>
 </html>`;
     
-    await window.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(browserHTML)}`);
+    await window.loadURL(\`data:text/html;charset=utf-8,\${encodeURIComponent(browserHTML)}\`);
 
     // Ensure window is visible and focused
     window.show();

@@ -16,7 +16,7 @@ import {
 } from '@tldraw/tldraw';
 import '@tldraw/tldraw/tldraw.css';
 import { BrowserNodeUtil } from './BrowserNode';
-import { createNode } from '@/lib/canvas';
+import { createNode, getViewerToken } from '@/lib/canvas';
 
 // Desktop Helper HTTP endpoint
 const DESKTOP_HELPER_URL = 'http://localhost:3002';
