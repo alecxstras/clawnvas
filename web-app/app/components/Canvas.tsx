@@ -151,7 +151,7 @@ export default function Canvas() {
           console.log('[Canvas] Selected browser node:', shape.props.nodeId);
           console.log('[Canvas] Opening browser for node:', shape.props.nodeId);
           
-          // Open browser window via desktop helper
+          // Open browser window via desktop helper (simplified - no tokens needed)
           fetch(`${DESKTOP_HELPER_URL}/create-session`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -166,22 +166,10 @@ export default function Canvas() {
               return res.json();
             })
             .then(() => {
-              console.log('[Canvas] Browser window opened, getting viewer token...');
-              return getViewerToken(shape.props.nodeId);
-            })
-            .then(({ viewerToken }) => {
-              console.log('[Canvas] Got viewer token, updating shape...');
-              editor.updateShape({
-                id: shape.id,
-                type: 'browser-node',
-                props: {
-                  ...shape.props,
-                  status: 'connecting',
-                  viewerToken,
-                },
-              });
+              console.log('[Canvas] Browser window opened, connecting...');
+              // Just dispatch connect event - BrowserNode will handle the stream
               window.dispatchEvent(new CustomEvent('browser-node-connect', {
-                detail: { nodeId: shape.props.nodeId, viewerToken }
+                detail: { nodeId: shape.props.nodeId }
               }));
             })
             .catch(err => {

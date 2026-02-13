@@ -125,6 +125,20 @@ function BrowserNodeComponent({ shape }: { shape: BrowserNodeShape }) {
     return () => btn.removeEventListener('click', handleClick);
   }, [nodeId, ownerToken, localStatus]);
 
+  // Listen for connect event from Canvas (right-click menu)
+  useEffect(() => {
+    const handleConnectEvent = (e: CustomEvent) => {
+      if (e.detail.nodeId === nodeId) {
+        console.log('[BrowserNode] Received connect event from Canvas');
+        // Start streaming immediately
+        setLocalStatus('live');
+      }
+    };
+    
+    window.addEventListener('browser-node-connect', handleConnectEvent as EventListener);
+    return () => window.removeEventListener('browser-node-connect', handleConnectEvent as EventListener);
+  }, [nodeId]);
+
   // Start polling for frames when live
   useEffect(() => {
     if (localStatus === 'live') {
