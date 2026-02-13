@@ -1,14 +1,13 @@
 import { BrowserWindow, desktopCapturer } from 'electron';
-import { io, Socket } from 'socket.io-client';
 
-const SIGNALING_URL = process.env.SIGNALING_URL || 'http://localhost:3001';
+const SIGNALING_URL = process.env.SIGNALING_URL || 'ws://localhost:3001';
 
 interface Session {
   id: string;
   nodeId: string;
   window: BrowserWindow;
   windowId: number;
-  socket: Socket;
+  socket: WebSocket;
   pc?: RTCPeerConnection;
   stream?: MediaStream;
 }
@@ -90,9 +89,9 @@ export class SessionManager {
     // window.webContents.openDevTools();
 
     // Connect to signaling server using native WebSocket
-    const socket = io(SIGNALING_URL, {
-      path: '/signal',
-    });
+    const wsUrl = `${SIGNALING_URL}/signal`;
+    console.log('[Signaling] Connecting to:', wsUrl);
+    const socket = new WebSocket(wsUrl);
 
     const session: Session = {
       id: nodeId,
@@ -103,69 +102,84 @@ export class SessionManager {
     };
 
     // Setup signaling handlers
-    socket.on('connect', () => {
+    socket.onopen = () => {
       console.log('[Signaling] ========== CONNECTED TO SERVER ==========');
       console.log('[Signaling] Publishing as node:', nodeId);
-      socket.emit('publish', { nodeId, ownerToken });
+      socket.send(JSON.stringify({ type: 'publish', nodeId, ownerToken }));
 
       // Start heartbeat every 5 seconds to validate signaling loop
       const heartbeatInterval = setInterval(() => {
-        if (session.socket.connected) {
-          session.socket.emit('heartbeat', {
+        if (socket.readyState === WebSocket.OPEN) {
+          socket.send(JSON.stringify({
+            type: 'heartbeat',
             nodeId,
             payload: {
               timestamp: Date.now(),
               windowTitle: window.getTitle(),
               url: window.webContents.getURL(),
             },
-          });
+          }));
         }
       }, 5000);
 
       // Store interval for cleanup
       (session as any).heartbeatInterval = heartbeatInterval;
-    });
+    };
 
-    socket.on('connect_error', (err: any) => {
-      console.error('[Signaling] Connection error:', err.message);
-    });
+    socket.onerror = (err: any) => {
+      console.error('[Signaling] Connection error:', err);
+    };
 
-    socket.on('disconnect', (reason: string) => {
-      console.log('[Signaling] Disconnected:', reason);
-    });
+    socket.onclose = () => {
+      console.log('[Signaling] Disconnected');
+    };
 
-    socket.on('join', async (data: { viewerToken: string }) => {
-      console.log('[Signaling] ========== VIEWER JOINING ==========');
-      console.log('[Signaling] Viewer token:', data.viewerToken);
-      console.log('[Signaling] Setting up WebRTC...');
-      // Viewer is ready - set up WebRTC with desktop capture
-      await this.setupWebRTC(session);
-    });
+    socket.onmessage = async (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        console.log('[Signaling] Received message:', data.type);
 
-    socket.on('answer', async (data: { sdp: RTCSessionDescriptionInit }) => {
-      console.log('[Signaling] ========== RECEIVED ANSWER ==========');
-      if (session.pc) {
-        console.log('[WebRTC] Setting remote description (answer)...');
-        await session.pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
-        console.log('[WebRTC] Remote description set successfully');
-      } else {
-        console.error('[WebRTC] No peer connection when answer received!');
-      }
-    });
-
-    socket.on('ice', async (data: { candidate: RTCIceCandidateInit }) => {
-      console.log('[Signaling] Received ICE candidate from viewer');
-      if (session.pc) {
-        try {
-          await session.pc.addIceCandidate(new RTCIceCandidate(data.candidate));
-          console.log('[WebRTC] ICE candidate added');
-        } catch (err) {
-          console.error('[WebRTC] Failed to add ICE candidate:', err);
+        switch (data.type) {
+          case 'connected':
+            console.log('[Signaling] Server confirmed connection, role:', data.role);
+            break;
+          case 'join':
+            console.log('[Signaling] ========== VIEWER JOINING ==========');
+            console.log('[Signaling] Viewer token:', data.viewerToken);
+            console.log('[Signaling] Setting up WebRTC...');
+            await this.setupWebRTC(session);
+            break;
+          case 'answer':
+            console.log('[Signaling] ========== RECEIVED ANSWER ==========');
+            if (session.pc) {
+              console.log('[WebRTC] Setting remote description (answer)...');
+              await session.pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
+              console.log('[WebRTC] Remote description set successfully');
+            } else {
+              console.error('[WebRTC] No peer connection when answer received!');
+            }
+            break;
+          case 'ice':
+            console.log('[Signaling] Received ICE candidate from viewer');
+            if (session.pc) {
+              try {
+                await session.pc.addIceCandidate(new RTCIceCandidate(data.candidate));
+                console.log('[WebRTC] ICE candidate added');
+              } catch (err) {
+                console.error('[WebRTC] Failed to add ICE candidate:', err);
+              }
+            } else {
+              console.error('[WebRTC] No peer connection when ICE received!');
+            }
+            break;
+          case 'error':
+            console.error('[Signaling] Server error:', data.message);
+            break;
         }
-      } else {
-        console.error('[WebRTC] No peer connection when ICE received!');
+      } catch (err) {
+        console.error('[Signaling] Failed to parse message:', err);
       }
-    });
+    };
 
     socket.on('revoke', () => {
       console.log('[Session] Revoked, stopping...');
@@ -216,10 +230,11 @@ export class SessionManager {
       pc.onicecandidate = (event) => {
         if (event.candidate) {
           console.log('[WebRTC] Sending ICE candidate to viewer:', event.candidate.candidate.substring(0, 50) + '...');
-          session.socket.emit('ice', {
+          session.socket.send(JSON.stringify({
+            type: 'ice',
             nodeId: session.nodeId,
             candidate: event.candidate.toJSON(),
-          });
+          }));
         } else {
           console.log('[WebRTC] ICE gathering complete (null candidate)');
         }
@@ -247,20 +262,22 @@ export class SessionManager {
       console.log('[WebRTC] Local description set');
 
       console.log('[WebRTC] Sending offer to signaling server...');
-      session.socket.emit('offer', {
+      session.socket.send(JSON.stringify({
+        type: 'offer',
         nodeId: session.nodeId,
         sdp: offer,
-      });
+      }));
       console.log('[WebRTC] ========== OFFER SENT ==========');
 
     } catch (error) {
       console.error('[WebRTC] ========== SETUP FAILED ==========');
       console.error('[WebRTC] Error:', error);
       // Notify web app of error
-      session.socket.emit('capture-error', {
+      session.socket.send(JSON.stringify({
+        type: 'capture-error',
         nodeId: session.nodeId,
         error: (error as Error).message,
-      });
+      }));
       throw error;
     }
   }
