@@ -64,39 +64,47 @@ const components: TLComponents = {
         {selectedShape && selectedShape.props.status === 'idle' && (
           <div 
             className="tlui-menu__item" 
-            onClick={() => {
+            onClick={async () => {
               console.log('[ContextMenu] Opening browser for:', selectedShape.props.nodeId);
-              fetch(`${DESKTOP_HELPER_URL}/create-session`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  nodeId: selectedShape.props.nodeId,
-                  ownerToken: selectedShape.props.ownerToken,
-                  title: `Browser Session - ${selectedShape.props.nodeId.slice(0, 8)}`,
-                }),
-              })
-                .then(res => {
-                  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-                  return res.json();
-                })
-                .then(() => getViewerToken(selectedShape.props.nodeId))
-                .then(({ viewerToken }) => {
-                  editor.updateShape({
-                    id: selectedShape.id,
-                    type: 'browser-node',
-                    props: {
-                      ...selectedShape.props,
-                      status: 'connecting',
-                    },
-                  });
-                  window.dispatchEvent(new CustomEvent('browser-node-connect', {
-                    detail: { nodeId: selectedShape.props.nodeId, viewerToken }
-                  }));
-                })
-                .catch(err => {
-                  console.error('[ContextMenu] Failed:', err);
-                  alert('Failed: ' + err.message);
+              try {
+                const response = await fetch(`${DESKTOP_HELPER_URL}/create-session`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    nodeId: selectedShape.props.nodeId,
+                    ownerToken: selectedShape.props.ownerToken,
+                    title: `Browser Session - ${selectedShape.props.nodeId.slice(0, 8)}`,
+                  }),
                 });
+                
+                if (!response.ok) {
+                  const text = await response.text();
+                  throw new Error(`HTTP ${response.status}: ${text}`);
+                }
+                
+                await response.json();
+                const { viewerToken } = await getViewerToken(selectedShape.props.nodeId);
+                
+                editor.updateShape({
+                  id: selectedShape.id,
+                  type: 'browser-node',
+                  props: {
+                    ...selectedShape.props,
+                    status: 'connecting',
+                  },
+                });
+                
+                window.dispatchEvent(new CustomEvent('browser-node-connect', {
+                  detail: { nodeId: selectedShape.props.nodeId, viewerToken }
+                }));
+              } catch (err) {
+                console.error('[ContextMenu] Failed:', err);
+                if (err instanceof TypeError && err.message.includes('fetch')) {
+                  alert('Failed to connect to Desktop Helper.\n\nMake sure:\n1. Desktop Helper is running (Terminal 3)\n2. Check console for errors');
+                } else {
+                  alert('Failed: ' + (err as Error).message);
+                }
+              }
             }}
             style={{ 
               padding: '8px 12px', 
